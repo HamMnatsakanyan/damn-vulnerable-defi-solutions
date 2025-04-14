@@ -10,7 +10,14 @@ There's a tokenized vault with a million DVT tokens deposited. It’s offering f
 To catch any bugs before going 100% permissionless, the developers decided to run a live beta in testnet. There's a monitoring contract to check liveness of the flashloan feature.
 Starting with 10 DVT tokens in balance, show that it's possible to halt the vault. It must stop offering flash loans.
 
-There are 2 contracts: UnstoppableVault.sol and UnstoppableMonitor.sol. In UnstoppableVault.sol contract, we have flashLoan function, which is responsible for giving loans. So we need to break that function. There are 3 checkings before the function starts executing the loan
+Contracts:
+      UnstoppableVault.sol - main logic.
+      UnstoppableMonitor.sol - monitoring if vault is functional
+      
+
+In UnstoppableVault.sol contract, we have flashLoan function, where the core functionality is implemented. If we break this function, the vault will stop giving loans.
+
+There are 3 checkings before the function starts executing the loan
 
       if (amount == 0) revert InvalidAmount(0); // fail early
       if (address(asset) != _token) revert UnsupportedCurrency(); // enforce ERC3156 requirement
