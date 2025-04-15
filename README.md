@@ -1,4 +1,4 @@
-# damn vulnerable defi v4 solutuions
+# damn vulnerable defi solutuions
 
 Here I solve Damn Vulnerable DeFi v4 challenges: https://www.damnvulnerabledefi.xyz/
 
