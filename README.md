@@ -4,7 +4,7 @@ Here I solve Damn Vulnerable DeFi v4 challenges: https://www.damnvulnerabledefi.
 
 In the explanations below, I assume that you are familiar with contracts.
 
-[1. Unstoppable](#1-unstoppable) 
+[1. Unstoppable](#1-unstoppable)      
 [2. Naive Receiver](#2-naive-receiver)
 
 ## 1. Unstoppable
