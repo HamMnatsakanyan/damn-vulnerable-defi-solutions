@@ -58,7 +58,7 @@ contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
         weth.transferFrom(address(receiver), address(this), amountWithFee);
         totalDeposits += amountWithFee;
 
-        deposits[feeReceiver] += FIXED_FEE;
+        deposits[ww] += FIXED_FEE;
 
         return true;
     }
