@@ -15,9 +15,10 @@ There's a tokenized vault with a million DVT tokens deposited. It’s offering f
 To catch any bugs before going 100% permissionless, the developers decided to run a live beta in testnet. There's a monitoring contract to check liveness of the flashloan feature.
 Starting with 10 DVT tokens in balance, show that it's possible to halt the vault. It must stop offering flash loans.
 
-Contracts:
-      UnstoppableVault.sol - main logic.
-      UnstoppableMonitor.sol - monitoring if vault is functional
+### Contracts
+
+UnstoppableVault.sol - main logic.
+UnstoppableMonitor.sol - monitoring if vault is functional
       
 ### Vulnerability Analysis
 
@@ -57,11 +58,12 @@ There’s a pool with 1000 WETH in balance offering flash loans. It has a fixed 
 A user deployed a sample contract with 10 WETH in balance. Looks like it can execute flash loans of WETH.
 All funds are at risk! Rescue all WETH from the user and the pool, and deposit it into the designated recovery account.
 
-Contracts:
-      NaiveRecevierPool.sol - The main pool that enables flash loans  
-      FlashLoanReceiver.sol - The victim borrower contract that will be drained
-      BasicForwarder.sol - Enables meta-transactions through an EIP-712 system
-      Multicall.sol - Allows batching multiple function calls into one transaction
+### Contracts:
+
+NaiveRecevierPool.sol - The main pool that enables flash loans  
+FlashLoanReceiver.sol - The victim borrower contract that will be drained
+BasicForwarder.sol - Enables meta-transactions through an EIP-712 system
+Multicall.sol - Allows batching multiple function calls into one transaction
 
 ### Vulnerability Analysis
 
