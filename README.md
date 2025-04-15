@@ -4,9 +4,9 @@ Here I solve Damn Vulnerable DeFi v4 challenges: https://www.damnvulnerabledefi.
 
 In the explanations below, I assume that you are familiar with contracts.
 
-1. Unstoppable
+## 1. Unstoppable
 
-## Challenge Overview
+### Challenge Overview
 
 There's a tokenized vault with a million DVT tokens deposited. It’s offering flash loans for free, until the grace period ends.
 To catch any bugs before going 100% permissionless, the developers decided to run a live beta in testnet. There's a monitoring contract to check liveness of the flashloan feature.
@@ -16,7 +16,7 @@ Contracts:
       UnstoppableVault.sol - main logic.
       UnstoppableMonitor.sol - monitoring if vault is functional
       
-## Vulnerability Analysis
+### Vulnerability Analysis
 
 In the UnstoppableVault.sol contract, we have a flashLoan function, where the core functionality is implemented. If we break this function, the vault will stop giving loans.
 
@@ -34,7 +34,7 @@ The only checking that is not dependent on function parameters is the third one.
 
 This check creates a strict requirement that the vault's accounting system always match the actual token balance. 
 
-## Solution
+### Solution
 
 By simply sending DVT tokens to the contract balance, we will successfully break the vault!
 
@@ -46,9 +46,9 @@ By simply sending DVT tokens to the contract balance, we will successfully break
     }
 
 
-2. Naive receiver
+## 2. Naive receiver
 
-## Challenge Overview
+### Challenge Overview
 
 There’s a pool with 1000 WETH in balance offering flash loans. It has a fixed fee of 1 WETH. The pool supports meta-transactions by integrating with a permissionless forwarder contract. 
 A user deployed a sample contract with 10 WETH in balance. Looks like it can execute flash loans of WETH.
@@ -60,7 +60,7 @@ Contracts:
       BasicForwarder.sol - Enables meta-transactions through an EIP-712 system
       Multicall.sol - Allows batching multiple function calls into one transaction
 
-## Vulnerability Analysis
+### Vulnerability Analysis
 
 So, we need to drain 1010 WETH from the pool and borrower contract. In NaiveReceiver.sol, we have the flashLoan function, which implements the core loan functionality. It calls the borrower's onFlashLoan() function, and here, we have our first critical security problem.
 
@@ -114,7 +114,7 @@ So we can put our address as the receiver. But there is a problem here. We, as m
 
 Here, if _msgSender() got the request from trustedForwarder and it has msg.data appended to it, it will return the address appended to the request. So here, we can simply initiate a withdrawal request through Forwarder and append the deployer's address to it. The withdraw function will receive the deployer's address and will transfer all the funds to the specified receiver!
 
-## Solution
+### Solution
 
     /**
      * CODE YOUR SOLUTION HERE
