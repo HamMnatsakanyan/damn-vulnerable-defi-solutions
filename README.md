@@ -17,8 +17,8 @@ Starting with 10 DVT tokens in balance, show that it's possible to halt the vaul
 
 ### Contracts
 
-UnstoppableVault.sol - main logic.
-UnstoppableMonitor.sol - monitoring if vault is functional
+UnstoppableVault.sol - main logic      
+UnstoppableMonitor.sol - monitoring if vault is functional      
       
 ### Vulnerability Analysis
 
@@ -61,8 +61,8 @@ All funds are at risk! Rescue all WETH from the user and the pool, and deposit i
 ### Contracts:
 
 NaiveRecevierPool.sol - The main pool that enables flash loans  
-FlashLoanReceiver.sol - The victim borrower contract that will be drained
-BasicForwarder.sol - Enables meta-transactions through an EIP-712 system
+FlashLoanReceiver.sol - The victim borrower contract that will be drained      
+BasicForwarder.sol - Enables meta-transactions through an EIP-712 system      
 Multicall.sol - Allows batching multiple function calls into one transaction
 
 ### Vulnerability Analysis
