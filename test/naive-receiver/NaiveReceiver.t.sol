@@ -80,7 +80,7 @@ contract NaiveReceiverChallenge is Test {
 
         uint8 numberOfCalls = 11;
 
-        // Create array of encoded flashLoan calls
+        // Create an array of encoded flashLoan calls
         bytes[] memory encodedCalls = new bytes[](numberOfCalls);
 
         for(uint8 i = 0; i < 10; i++) {
@@ -125,7 +125,7 @@ contract NaiveReceiverChallenge is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(playerPk, requestHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // Execute the tansaction
+        // Execute the transaction
         forwarder.execute(request, signature);
     }
 
