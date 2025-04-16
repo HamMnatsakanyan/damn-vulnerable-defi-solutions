@@ -50,6 +50,7 @@ By simply sending DVT tokens to the contract balance, we will successfully break
     }
 
 
+
 ## 2. Naive receiver
 
 ### Challenge Overview
@@ -176,6 +177,7 @@ Here, if _msgSender() got the request from trustedForwarder and it has msg.data 
         // Execute the transaction
         forwarder.execute(request, signature);
     }
+
 
 ## Truster
 
