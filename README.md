@@ -6,6 +6,7 @@ In the explanations below, I assume that you are familiar with contracts.
 
 [1. Unstoppable](#1-unstoppable)      
 [2. Naive Receiver](#2-naive-receiver)
+[3. Truster](#3-truster)
 
 ## 1. Unstoppable
 
@@ -180,7 +181,7 @@ Here, if _msgSender() got the request from trustedForwarder and it has msg.data 
     }
 
 
-## Truster
+## 3. Truster
 
 ### Challenge Overview 
 
