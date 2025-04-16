@@ -198,7 +198,7 @@ TrusterLenderPool.sol
 The pool's core functionality is implemented in flashLoan function. At the end of the function, it checks if the funds are fully refunded, so we need to find a way to get the DVT tokens after the function execution. 
 If we look closer, we can see that contract lets us make arbitrary function call.
 
-        target.functionCall(data);
+    target.functionCall(data);
 
 This means, that we can call any function we want from flashLoan function. So if we make the pool contract to approve the DVT tokens for us, later we can transfer them to our recovery address. 
 
