@@ -6,7 +6,8 @@ In the explanations below, I assume that you are familiar with contracts.
 
 [1. Unstoppable](#1-unstoppable)      
 [2. Naive Receiver](#2-naive-receiver)  
-[3. Truster](#3-truster)
+[3. Truster](#3-truster)    
+[4. Side Entrence](#4-side-enterance)   
 
 ## 1. Unstoppable
 
@@ -226,7 +227,7 @@ This means, that we can call any function we want from flashLoan function. So if
     }
 
 
-## Side enterance
+## 4. Side enterance
 
 ### Challenge overview
 
