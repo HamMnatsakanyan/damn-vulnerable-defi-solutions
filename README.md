@@ -236,8 +236,18 @@ You start with 1 ETH in balance. Pass the challenge by rescuing all ETH from the
 
 ### Vulnerability Analysis
 
-In flashLoan() function we can see, that we have an opportunity to call our implementation of execute() function. 
-The function checks if we refund the ETH to contract, but it doesn't control the way we do that. The root issue is that the contract doesn't distinguish between "repayment of a loan" and "making a deposit" - they both increase the contract's ETH balance, but have very different accounting implications. So we can simply refund the ETH to loaning contract buy depositing into it. The contract will get the funds back and pass the checking, but in contract's accountng the ETH will belong to exploiter contract.
+In the flashLoan() function, we can see that we have an opportunity to call our implementation of the execute() function. 
+The function checks if we refund the ETH to the contract, but it doesn't control the way we do that. 
+
+The root issue is that the contract doesn't distinguish between "repayment of a loan" and "making a deposit" - they both increase the contract's ETH balance, but have very different accounting implications. 
+
+Attack flow:
+1. Call flashLoan() to borrow all ETH from the pool
+2. In our execute() function, deposit the borrowed ETH back into the pool
+3. The pool's balance is restored (passing the check), but now we have credit in the pool's accounting system
+4. Call withdraw() to drain the pool of all funds
+
+This attack allows us to drain all ETH from the pool without actually owning any legitimate stake in it.
 
 ### Solution
 
