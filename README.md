@@ -197,12 +197,12 @@ TrusterLenderPool.sol
 
 ### Vulnerability Analysis
 
-The pool's core functionality is implemented in flashLoan function. At the end of the function, it checks if the funds are fully refunded, so we need to find a way to get the DVT tokens after the function execution. 
-If we look closer, we can see that contract lets us make arbitrary function call.
+The pool's core functionality is implemented in the flashLoan function. At the end of the function, it checks if the funds are fully refunded, so we need to find a way to get the DVT tokens after the function execution. 
+If we look closer, we can see that the contract lets us make an arbitrary function call.
 
     target.functionCall(data);
 
-This means, that we can call any function we want from flashLoan function. So if we make the pool contract to approve the DVT tokens for us, later we can transfer them to our recovery address. 
+This means that we can call any function we want from the flashLoan function. So if we make the pool contract to approve the DVT tokens for us, later we can transfer them to our recovery address. 
 
 ### Solution
 
@@ -228,7 +228,7 @@ This means, that we can call any function we want from flashLoan function. So if
     }
 
 
-## 4. Side enterance
+## 4. Side entrance
 
 ### Challenge overview
 
@@ -299,10 +299,10 @@ Save as much funds as you can from the distributor. Transfer all recovered asset
 
 ### Vulnerability Analysis
 
-Only way to get he funds is the claimRewards() function, so let's focus on that. The function allows us to claim both DVT ans WETH rewards with one request. 
+The only way to get the funds is the claimRewards() function, so let's focus on that. The function allows us to claim both DVT and WETH rewards with one request. 
 The first vulnerability we can notice is that the function marks our reward claimed in two cases:
     1. During the last iteration
-    2. When token to claim changes
+    2. When the token to claim changes
 
 Also, there's no limit on how many claims we can process in a single transaction. This creates an exploit path where we can submit multiple identical claims (using the same valid Merkle proof since 'player' is a legitimate beneficiary) for the same token and batch. Since the contract only marks claims as claimed at token switches or at the end of processing, we can claim our reward multiple times and drain the contract.
 
@@ -312,7 +312,7 @@ Attack flow:
 3. For each token:
    - Make the first claim with a valid Merkle proof (since our address is on the beneficiary list)
    - Make multiple subsequent claims with the same Merkle proof
-   - The contract will verify the proof for each claim but only mark the batch as claimed after processing all claims
+   - The contract will verify the proof for each claim, but only mark the batch as claimed after processing all claims
 4. Execute the transaction to drain nearly all tokens from the distributor 
 5. Transfer all recovered assets to the designated recovery account
 
