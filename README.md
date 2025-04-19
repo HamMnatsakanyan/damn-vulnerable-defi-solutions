@@ -7,7 +7,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [1. Unstoppable](#1-unstoppable)      
 [2. Naive Receiver](#2-naive-receiver)  
 [3. Truster](#3-truster)    
-[4. Side Entrence](#4-side-enterance)   
+[4. Side Entrance](#4-side-entrance)   
 [5. The Rewarder](#5-the-rewarder)  
 
 ## 1. Unstoppable
