@@ -8,6 +8,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [2. Naive Receiver](#2-naive-receiver)  
 [3. Truster](#3-truster)    
 [4. Side Entrence](#4-side-enterance)   
+[5. The Rewarder](#5-the-rewarder)  
 
 ## 1. Unstoppable
 
