@@ -9,6 +9,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [3. Truster](#3-truster)    
 [4. Side Entrance](#4-side-entrance)   
 [5. The Rewarder](#5-the-rewarder)  
+[6. Selfie](#6-selfie)      
 
 ## 1. Unstoppable
 
@@ -397,7 +398,7 @@ Rescue all funds from the pool and deposit them into the designated recovery acc
 
 ### Vulnerability Analysis
 
-The first vulerability we can see is that the contract let's us take all of it's token as loan. The second fundamental issue is that the governance mechanism doesn't differentiate between token holders and accounts that only momentarily hold tokens (like during a flash loan). This creates a critical vulnerability where temporary capital can be used to influence governance decisions with permanent consequences.
+The first vulnerability we can see is that the contract lets us take all of its tokens as a loan. The second fundamental issue is that the governance mechanism doesn't differentiate between token holders and accounts that only momentarily hold tokens (like during a flash loan). This creates a critical vulnerability where temporary capital can be used to influence governance decisions with permanent consequences.
 
 Attack flow:
 
