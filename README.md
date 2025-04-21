@@ -9,7 +9,8 @@ In the explanations below, I assume that you are familiar with contracts.
 [3. Truster](#3-truster)    
 [4. Side Entrance](#4-side-entrance)   
 [5. The Rewarder](#5-the-rewarder)  
-[6. Selfie](#6-selfie)      
+[6. Selfie](#6-selfie)     
+[7. Compromised](#7-compromised)
 
 ## 1. Unstoppable
 
@@ -466,7 +467,7 @@ Attack flow:
     }
 
 
-## 6. Compromised
+## 7. Compromised
 
 ### Challenge Overview
 
@@ -496,10 +497,10 @@ The data leak can be something critical. Converting the hex data to ASCII reveal
 Attack flow:
 
 1. Extract private keys from leaked data    
-2. Manipulate price downward    
-3. Buy NFT at manipulated price 
+2. Manipulate the price downward    
+3. Buy NFT at the manipulated price 
 4. Reset oracle price   
-5. Sell NFT at inflated price   
+5. Sell NFT at the inflated price   
 
 ### Solution
 
