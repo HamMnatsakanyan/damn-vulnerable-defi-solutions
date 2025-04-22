@@ -12,7 +12,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [6. Selfie](#6-selfie)     
 [7. Compromised](#7-compromised)    
 [8. Puppet](#8-puppet)  
-[9. Puppet-V2](#9-puppet-v2)
+[9. Puppet-V2](#9-puppet-v2)    
 
 ## 1. Unstoppable
 
@@ -614,7 +614,7 @@ contract Attacker {
     }
 
 
-## Puppet V2    
+## 9. Puppet V2    
 
 ### Challenge Overview  
 
