@@ -10,8 +10,8 @@ In the explanations below, I assume that you are familiar with contracts.
 [4. Side Entrance](#4-side-entrance)   
 [5. The Rewarder](#5-the-rewarder)  
 [6. Selfie](#6-selfie)     
-[7. Compromised](#7-compromised)
-[8. Puppet](#8-puppet)
+[7. Compromised](#7-compromised)    
+[8. Puppet](#8-puppet)  
 
 ## 1. Unstoppable
 
