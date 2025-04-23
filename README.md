@@ -727,6 +727,37 @@ If only you could get free ETH, at least for an instant.
 
 ### Vulnerability Analysis  
 
+The Free Rider challenge exposes a critical flaw in the payment logic of the NFT marketplace contract. The marketplace contains a logical error in the order of operations during NFT purchases.    
+The core vulnerability lies in the _buyOne() function within the FreeRiderNFTMarketplace contract:  
+
+    function _buyOne(uint256 tokenId) private {
+        uint256 priceToPay = offers[tokenId];
+        // ... checks for valid offer and sufficient payment ...
+        
+        --offersCount;
+
+        // transfer from seller to buyer
+        DamnValuableNFT _token = token;
+        _token.safeTransferFrom(_token.ownerOf(tokenId), msg.sender, tokenId);
+
+        // pay seller using cached token
+        payable(_token.ownerOf(tokenId)).sendValue(priceToPay);
+
+        emit NFTBought(msg.sender, tokenId, priceToPay);
+    }
+
+This implementation is vulnerable because it transfers the NFT to the buyer before paying the seller. The critical issue is that it calls _token.ownerOf(tokenId) after the NFT has already been transferred, which returns the buyer's address rather than the original seller. This means the buyer receives both the NFT and a refund of their payment, essentially allowing NFTs to be purchased for free.  
+
+Attack flow:
+
+1. Obtain temporary ETH through a Uniswap V2 flash swap to cover the initial purchase price 
+2. Convert the borrowed WETH to ETH to make it compatible with the marketplace  
+3. Purchase all 6 NFTs from the marketplace using the buyMany() function    
+4. Due to the vulnerability, receive both the NFTs and all of the ETH back  
+5. Transfer all 6 NFTs to the recovery manager contract with encoded data pointing to the attacker's address    
+6. Receive the 45 ETH bounty from the recovery manager  
+7. Convert enough ETH back to WETH to repay the flash loan with the 0.3% Uniswap V2 specific fee    
+
 ### Solution    
 
     contract Attacker is IERC721Receiver{
