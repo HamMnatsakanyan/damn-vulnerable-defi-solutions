@@ -154,7 +154,6 @@ contract BackdoorChallenge is Test {
             AMOUNT_TOKENS_DISTRIBUTED
         );
         attacker.attack();
-
     }
 
     /**
