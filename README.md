@@ -836,3 +836,58 @@ Attack flow:
         attacker.startAttack();
     }
 
+
+## 11. Backdoor
+
+### Challenge Overview
+
+### Vulnerability Analysis
+
+The Backdoor challenge exposes a vulnerability in the integration between the WalletRegistry and Safe wallet initialization process. The registry implements rewards for beneficiaries who deploy wallets but fails to properly validate all aspects of wallet creation.
+The core vulnerability lies in the setup function of the Safe contract that allows for delegate calls during initialization:    
+
+    // From Safe contract (not directly shown in challenge code)
+    function setup(
+        address[] calldata _owners,
+        uint256 _threshold,
+        address to,          // Contract that will be called via delegatecall
+        bytes calldata data,  // Data for the delegatecall
+        address fallbackHandler,
+        address paymentToken,
+        uint256 payment,
+        address payable paymentReceiver
+    ) external { ... }  
+
+This implementation is vulnerable because the WalletRegistry only validates certain parameters of the Safe wallet during the proxyCreated callback: 
+
+    // Checks owner count
+    address[] memory owners = Safe(walletAddress).getOwners();
+    if (owners.length != EXPECTED_OWNERS_COUNT) {
+        revert InvalidOwnersCount(owners.length);
+    }
+
+    // Checks the owner is a beneficiary
+    address walletOwner = owners[0];
+    if (!beneficiaries[walletOwner]) {
+        revert OwnerIsNotABeneficiary();
+    }
+
+    // Checks fallback manager
+    address fallbackManager = _getFallbackManager(walletAddress);
+    if (fallbackManager != address(0)) {
+        revert InvalidFallbackManager(fallbackManager);
+    }   
+
+Crucially, the registry does not inspect or restrict the delegate call parameters (to and data) that are passed during wallet initialization. This oversight allows an attacker to include a malicious delegate call that executes with the context and permissions of the newly created wallet.    
+
+Attack flow:
+
+1. Deploy a malicious contract with a function that approves token transfers
+2. For each beneficiary in the registry, create a Safe wallet with:
+    - The beneficiary as the wallet owner (to pass registry checks)
+    - A delegate call to the malicious contract during initialization
+3. The delegate call executes in the context of the new wallet, approving the attacker to spend its tokens
+4. When the registry transfers 10 DVT to each new wallet as a reward, immediately transfer those tokens to the attacker
+5. After collecting tokens from all four beneficiaries, transfer the total 40 DVT to the recovery address
+
+### Solution
