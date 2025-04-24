@@ -849,7 +849,7 @@ Uncover the vulnerability in the registry, rescue all funds, and deposit them in
 
 ### Vulnerability Analysis
 
-The Backdoor challenge exposes a vulnerability in the integration between the WalletRegistry and Safe wallet initialization process. The registry implements rewards for beneficiaries who deploy wallets but fails to properly validate all aspects of wallet creation.
+The Backdoor challenge exposes a vulnerability in the integration between the WalletRegistry and Safe wallet initialization process. The registry implements rewards for beneficiaries who deploy wallets but fails to properly validate all aspects of wallet creation.    
 The core vulnerability lies in the setup function of the Safe contract that allows for delegate calls during initialization:    
 
     // From Safe contract (not directly shown in challenge code)
