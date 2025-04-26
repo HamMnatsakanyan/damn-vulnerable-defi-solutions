@@ -1001,29 +1001,31 @@ You must rescue all tokens from the vault and deposit them into the designated r
 ### Vulnerability Analysis  
 
 The Climber challenge exposes a critical vulnerability in the execution flow of the ClimberTimelock contract. The timelock controls access to a secure vault with 10 million DVT tokens, and the vulnerability allows an attacker to bypass the timelock delay mechanism completely.
-The core vulnerability lies in the execute() function within the ClimberTimelock contract:
-solidityfunction execute(address[] calldata targets, uint256[] calldata values, bytes[] calldata dataElements, bytes32 salt)
-    external
-    payable
-{
-    if (targets.length <= MIN_TARGETS) {
-        revert InvalidTargetsCount();
-    }
+The core vulnerability lies in the execute() function within the ClimberTimelock contract:  
 
-    // ... other validation ...
+    function execute(address[] calldata targets, uint256[] calldata values, bytes[] calldata dataElements, bytes32 salt)
+        external
+        payable
+    {
+        if (targets.length <= MIN_TARGETS) {
+            revert InvalidTargetsCount();
+        }
 
-    bytes32 id = getOperationId(targets, values, dataElements, salt);
+        // ... other validation ...
 
-    for (uint8 i = 0; i < targets.length; ++i) {
-        targets[i].functionCallWithValue(dataElements[i], values[i]);
-    }
+        bytes32 id = getOperationId(targets, values, dataElements, salt);
 
-    if (getOperationState(id) != OperationState.ReadyForExecution) {
-        revert NotReadyForExecution(id);
-    }
+        for (uint8 i = 0; i < targets.length; ++i) {
+            targets[i].functionCallWithValue(dataElements[i], values[i]);
+        }
 
-    operations[id].executed = true;
-}
+        if (getOperationState(id) != OperationState.ReadyForExecution) {
+            revert NotReadyForExecution(id);
+        }
+
+        operations[id].executed = true;
+    }   
+    
 This implementation is vulnerable because it executes all function calls before validating if the operation was properly scheduled and ready for execution. This "execute first, validate later" pattern creates a critical race condition where an attacker can manipulate the contract's state during execution to make the validation check pass.    
 
 Attack flow:    
