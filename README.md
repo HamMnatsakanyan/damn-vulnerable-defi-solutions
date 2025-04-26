@@ -15,6 +15,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [9. Puppet-V2](#9-puppet-v2)    
 [10. Free Rider](#10-free-rider)    
 [11. Backdoor](#11-backdoor)    
+[12. Climber](#12-climber)
 
 ## 1. Unstoppable
 
@@ -987,7 +988,7 @@ Attack flow:
         attacker.attack();
     }
 
-## 12. Cliber   
+## 12. Climber   
 
 ### Chalange Overview   
 
