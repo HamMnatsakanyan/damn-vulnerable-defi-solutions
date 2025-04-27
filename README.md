@@ -1007,9 +1007,6 @@ The core vulnerability lies in the execute() function within the ClimberTimelock
         external
         payable
     {
-        if (targets.length <= MIN_TARGETS) {
-            revert InvalidTargetsCount();
-        }
 
         // ... other validation ...
 
@@ -1025,7 +1022,7 @@ The core vulnerability lies in the execute() function within the ClimberTimelock
 
         operations[id].executed = true;
     }   
-    
+
 This implementation is vulnerable because it executes all function calls before validating if the operation was properly scheduled and ready for execution. This "execute first, validate later" pattern creates a critical race condition where an attacker can manipulate the contract's state during execution to make the validation check pass.    
 
 Attack flow:    

