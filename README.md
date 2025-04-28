@@ -15,7 +15,8 @@ In the explanations below, I assume that you are familiar with contracts.
 [9. Puppet-V2](#9-puppet-v2)    
 [10. Free Rider](#10-free-rider)    
 [11. Backdoor](#11-backdoor)    
-[12. Climber](#12-climber)
+[12. Climber](#12-climber)  
+[13. Wallet Mining](#13-wallet-mining)
 
 ## 1. Unstoppable
 
