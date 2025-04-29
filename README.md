@@ -16,8 +16,8 @@ In the explanations below, I assume that you are familiar with contracts.
 [10. Free Rider](#10-free-rider)    
 [11. Backdoor](#11-backdoor)    
 [12. Climber](#12-climber)  
-[13. Wallet Mining](#13-wallet-mining)
-[14. Puppet V3](#14-puppet-v3)
+[13. Wallet Mining](#13-wallet-mining)  
+[14. Puppet V3](#14-puppet-v3)  
 
 ## 1. Unstoppable
 
@@ -1336,22 +1336,23 @@ This implementation is vulnerable for several reasons:
 2. Insufficient liquidity: The Uniswap V3 pool only has 100 WETH and 100 DVT    
 3. Concentrated liquidity range: The pool's liquidity is concentrated in a narrow price range, explicitly defined in the setup:     
 
-positionManager.mint(
-    INonfungiblePositionManager.MintParams({
-        token0: token0,
-        token1: token1,
-        tickLower: -60,
-        tickUpper: 60,
-        fee: FEE,
-        recipient: deployer,
-        amount0Desired: UNISWAP_INITIAL_WETH_LIQUIDITY,
-        amount1Desired: UNISWAP_INITIAL_TOKEN_LIQUIDITY,
-        amount0Min: 0,
-        amount1Min: 0,
-        deadline: block.timestamp
-    })
-);
-
+``` 
+    positionManager.mint(
+        INonfungiblePositionManager.MintParams({
+            token0: token0,
+            token1: token1,
+            tickLower: -60,
+            tickUpper: 60,
+            fee: FEE,
+            recipient: deployer,
+            amount0Desired: UNISWAP_INITIAL_WETH_LIQUIDITY,
+            amount1Desired: UNISWAP_INITIAL_TOKEN_LIQUIDITY,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: block.timestamp
+        })
+    );
+``` 
 4. No circuit breakers: The oracle blindly trusts the Uniswap V3 TWAP without any validation or maximum price deviation checks  
 
 Attack flow:    
