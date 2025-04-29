@@ -17,6 +17,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [11. Backdoor](#11-backdoor)    
 [12. Climber](#12-climber)  
 [13. Wallet Mining](#13-wallet-mining)
+[14. Puppet V3](#14-puppet-v3)
 
 ## 1. Unstoppable
 
@@ -1339,8 +1340,8 @@ This implementation is vulnerable for several reasons:
         INonfungiblePositionManager.MintParams({
             token0: token0,
             token1: token1,
-            tickLower: -60,  // Narrow liquidity range lower bound
-            tickUpper: 60,   // Narrow liquidity range upper bound
+            tickLower: -60,
+            tickUpper: 60,
             fee: FEE,
             recipient: deployer,
             amount0Desired: UNISWAP_INITIAL_WETH_LIQUIDITY,
@@ -1349,7 +1350,7 @@ This implementation is vulnerable for several reasons:
             amount1Min: 0,
             deadline: block.timestamp
         })
-    );  
+    );
 
 4. No circuit breakers: The oracle blindly trusts the Uniswap V3 TWAP without any validation or maximum price deviation checks  
 
