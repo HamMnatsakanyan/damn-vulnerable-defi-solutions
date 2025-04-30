@@ -1431,7 +1431,7 @@ The core vulnerability lies in the execute() function within the AuthorizedExecu
         return target.functionCall(actionData);
     }   
 
-This implementation is vulnerable due to a fundamental mismatch between permission checking and execution. The code assumes actionData always begins at position 100 (4 + 32 * 3), ignoring the fact that in ABI encoding, the actual location is determined by a dynamic offset. There is no validation of actionData integrity, as the code extracts what it thinks is the function selector without verifying it's examining the correct position. Most critically, the code checks permissions based on bytes at a fixed position but executes the entire actionData regardless of what the permission check actually examined, creating a severe permission check/execution mismatch.
+This implementation is vulnerable due to a fundamental mismatch between permission checking and execution. The code assumes that the actionData always begins at position 100 (4 + 32 * 3), ignoring the fact that in ABI encoding, the actual location is determined by a dynamic offset. There is no validation of actionData integrity, as the code extracts what it thinks is the function selector without verifying it's examining the correct position. Most critically, the code checks permissions based on bytes at a fixed position but executes the entire actionData regardless of what the permission check actually examined, creating a permission check/execution mismatch.
 
 
 ### Solution
