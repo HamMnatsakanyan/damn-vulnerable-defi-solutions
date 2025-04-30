@@ -19,6 +19,7 @@ In the explanations below, I assume that you are familiar with contracts.
 [13. Wallet Mining](#13-wallet-mining)  
 [14. Puppet V3](#14-puppet-v3)  
 [15. ABI Smuggling](#15-abi-smuggling)  
+[16. Shards](#16-shards)    
 
 ## 1. Unstoppable
 
