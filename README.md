@@ -1581,13 +1581,15 @@ Protect the bridge by finalizing _all_ given withdrawals, preventing the suspici
 
 The challenge exposes a critical threat where a potentially malicious user attempts to withdraw 990,000 tokens (99% of the bridge's balance) alongside legitimate transactions. The discovery comes from analyzing the withdrawal events where:
 
+```
     // Third withdrawal (discovered to be malicious)
     {
         "topics": [...],
         "data": "0xbaee8dea6b24d327bc9fcd7ce867990427b9d6f48a92f4b331514ea688909015..."
     }
+```
 
-    When decoded, this withdrawal reveals:  
+When decoded, this withdrawal reveals:  
     - Receiver: 0xea475d60c118d7058bef4bdd9c32ba51139a74e0  
     - Amount: 0xd38be6051f27c26000 (990,000 tokens) 
     - Unlike other withdrawals that request only 10 tokens each 
