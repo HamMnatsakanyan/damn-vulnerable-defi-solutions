@@ -1591,7 +1591,7 @@ The challenge exposes a critical threat where a potentially malicious user attem
 
 When decoded, this withdrawal reveals:  
     - Receiver: 0xea475d60c118d7058bef4bdd9c32ba51139a74e0  
-    - Amount: 0xd38be6051f27c26000 (990,000 tokens) 
+    - Amount: 0xd38be6051f27c26000 (990,000 tokens)     
     - Unlike other withdrawals that request only 10 tokens each 
 
 Solution flow:    
