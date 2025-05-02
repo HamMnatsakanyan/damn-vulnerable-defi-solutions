@@ -1566,6 +1566,7 @@ Attack flow:
         attacker.attack();
     }
 
+## 17. Curvy Puppet 
 
 ## 18. Withdrawal
 
