@@ -38,25 +38,27 @@ UnstoppableMonitor.sol - monitoring if vault is functional
       
 ### Vulnerability Analysis
 
-In the UnstoppableVault.sol contract, we have a flashLoan function, where the core functionality is implemented. If we break this function, the vault will stop giving loans.
+The UnstoppableVault challenge presents a denial-of-service (DoS) vulnerability through accounting system manipulation. The vault implements an ERC4626-compliant tokenized vault offering flash loans, but it contains a strict invariant check that can be exploited to prevent all flash loan operations. 
+The core vulnerability lies in the flash loan function's ERC4626 compliance check:
 
-There are 3 checkings before the function starts executing the loan
+    function flashLoan(...) external returns (bool) {
+        if (amount == 0) revert InvalidAmount(0);
+        if (address(asset) != _token) revert UnsupportedCurrency();
+        uint256 balanceBefore = totalAssets();
+        if (convertToShares(totalSupply) != balanceBefore) revert InvalidBalance();
+        // ... rest of flash loan logic
+    }
 
-      if (amount == 0) revert InvalidAmount(0); // fail early
-      if (address(asset) != _token) revert UnsupportedCurrency(); // enforce ERC3156 requirement
-      uint256 balanceBefore = totalAssets();
-      if (convertToShares(totalSupply) != balanceBefore) revert InvalidBalance(); // enforce ERC4626 requirement
+This implementation is vulnerable because it enforces a strict accounting invariant that can be easily broken: the vault's token balance must exactly match what the share accounting system expects. Since the contract can receive tokens directly through transfers, this invariant can be compromised without going through the proper deposit mechanism.   
 
-This is the critical part. If we succeed in making the function always fail one of those checks, the vault will stop giving loans.
-The only checking that is not dependent on function parameters is the third one. 
+### Attack Flow 
 
-      if (convertToShares(totalSupply) != balanceBefore) revert InvalidBalance(); // enforce ERC4626 requirement
-
-This check creates a strict requirement that the vault's accounting system always match the actual token balance. 
+1. Send any number of DVT tokens to vault address to increase it's balance without affecting the accounting system  
+2. The invariant check (convertToShares(totalSupply) != balanceBefore) now permanently fails with InvalidBalance() error, effectively disabling the 
 
 ### Solution
 
-By simply sending DVT tokens to the contract balance, we will successfully break the vault!
+[Code](https://github.com/HamMnatsakanyan/damn-vulnerable-defi-solutions/blob/main/test/unstoppable/Unstoppable.t.sol)  
 
     /**
      * CODE YOUR SOLUTION HERE
@@ -138,6 +140,8 @@ So we can put our address as the receiver. But there is a problem here. We, as m
 Here, if _msgSender() got the request from trustedForwarder and it has msg.data appended to it, it will return the address appended to the request. So here, we can simply initiate a withdrawal request through Forwarder and append the deployer's address to it. The withdraw function will receive the deployer's address and will transfer all the funds to the specified receiver!
 
 ### Solution
+
+[Code](https://github.com/HamMnatsakanyan/damn-vulnerable-defi-solutions/blob/main/test/naive-receiver/NaiveReceiver.t.sol#L79)
 
     /**
      * CODE YOUR SOLUTION HERE
