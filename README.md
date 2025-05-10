@@ -221,6 +221,14 @@ If we look closer, we can see that the contract lets us make an arbitrary functi
 
 This means that we can call any function we want from the flashLoan function. So if we make the pool contract to approve the DVT tokens for us, later we can transfer them to our recovery address. 
 
+### Attack Flow
+
+1. Call flashLoan() with a zero amount (no actual borrowing needed)
+2. For data, encode an approve() call that gives us permission to transfer all the pool's tokens
+3. The pool itself will execute this approval on our behalf
+4. The balance check passes since we didn't take any tokens yet
+5. After the flashLoan completes, use transferFrom() to move all tokens from the pool to our address
+
 ### Solution
 
     contract Drainer {
@@ -861,21 +869,7 @@ Uncover the vulnerability in the registry, rescue all funds, and deposit them in
 ### Vulnerability Analysis
 
 The Backdoor challenge exposes a vulnerability in the integration between the WalletRegistry and Safe wallet initialization process. The registry implements rewards for beneficiaries who deploy wallets but fails to properly validate all aspects of wallet creation.    
-The core vulnerability lies in the setup function of the Safe contract that allows for delegate calls during initialization:    
-
-    // From Safe contract (not directly shown in challenge code)
-    function setup(
-        address[] calldata _owners,
-        uint256 _threshold,
-        address to,          // Contract that will be called via delegatecall
-        bytes calldata data,  // Data for the delegatecall
-        address fallbackHandler,
-        address paymentToken,
-        uint256 payment,
-        address payable paymentReceiver
-    ) external { ... }  
-
-This implementation is vulnerable because the WalletRegistry only validates certain parameters of the Safe wallet during the proxyCreated callback: 
+The core vulnerability lies in the setup function of the Safe contract that allows for delegate calls during initialization. The WalletRegistry only validates certain parameters of the Safe wallet during the proxyCreated callback:  
 
     // Checks owner count
     address[] memory owners = Safe(walletAddress).getOwners();
@@ -895,7 +889,7 @@ This implementation is vulnerable because the WalletRegistry only validates cert
         revert InvalidFallbackManager(fallbackManager);
     }   
 
-Crucially, the registry does not inspect or restrict the delegate call parameters (to and data) that are passed during wallet initialization. This oversight allows an attacker to include a malicious delegate call that executes with the context and permissions of the newly created wallet.    
+The registry does not inspect or restrict the delegate call parameters (to and data) that are passed during wallet initialization. This oversight allows an attacker to include a malicious delegate call that executes with the context and permissions of the newly created wallet.    
 
 Attack flow:
 
@@ -1438,7 +1432,7 @@ The core vulnerability lies in the execute() function within the AuthorizedExecu
         return target.functionCall(actionData);
     }   
 
-This implementation is vulnerable due to a fundamental mismatch between permission checking and execution. The code assumes that the actionData always begins at position 100 (4 + 32 * 3), ignoring the fact that in ABI encoding, the actual location is determined by a dynamic offset. There is no validation of actionData integrity, as the code extracts what it thinks is the function selector without verifying it's examining the correct position. Most critically, the code checks permissions based on bytes at a fixed position but executes the entire actionData regardless of what the permission check actually examined, creating a permission check/execution mismatch.
+The code assumes that the actionData always begins at position 100 (4 + 32 * 3), ignoring the fact that in ABI encoding, the actual location is determined by a dynamic offset. There is no validation of actionData integrity, as the code extracts what it thinks is the function selector without verifying it's examining the correct position. Most critically, the code checks permissions based on bytes at a fixed position but executes the entire actionData regardless of what the permission check actually examined, creating a permission check/execution mismatch.
 
 Attack flow:    
 
